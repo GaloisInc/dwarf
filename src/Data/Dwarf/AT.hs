@@ -1,5 +1,12 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# OPTIONS_GHC -fno-warn-missing-pattern-synonym-signatures #-}
+-- We currently disable -Wmissing-signatures as a way to avoid warnings on
+-- GHC 9.2, which emits -Wmissing-signatures warnings related to pattern
+-- synonyms even if -Wmissing-pattern-synonym-signatures is disabled. See
+-- https://gitlab.haskell.org/ghc/ghc/-/issues/14794#note_424553. If that
+-- issue is resolved in a subsequent minor release of GHC 9.2, we can remove
+-- this workaround.
+{-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 module Data.Dwarf.AT where
 
 import qualified Data.ByteString as B
