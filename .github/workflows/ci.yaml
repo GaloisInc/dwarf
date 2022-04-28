@@ -7,10 +7,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        name: [linux-8.8.4]
-        include:
-        - name: linux-8.8.4
-          ghc-ver: 8.8.4
+        ghc-ver: ["8.8.4"]
+        cabal: ["3.4.0.0"]
       # complete all jobs
       fail-fast: false
     steps:
@@ -18,24 +16,25 @@ jobs:
       uses: actions/checkout@v2
       with:
         submodules: true
-    - name: Get GHC
-      run: |
-        ghcup install ghc ${{ matrix.ghc-ver }}
-        ghcup install cabal 3.4.0.0
-        ghcup set ghc ${{ matrix.ghc-ver }}
-    - name: Cache
-      uses: actions/cache@v1
-      with:
-        path: /home/runner/.cabal/store/ghc-${{ matrix.ghc-ver }}
-        # Prefer previous SHA hash if it is still cached
-        key: ${{ matrix.name }}-${{ github.sha }}
-        # otherwise just use most recent build.
-        restore-keys: ${{ matrix.name }}
     - name: Link cabal project files
       run: |
         ln -s cabal.project.dist                                  cabal.project
         ln -s cabal.project.werror                                cabal.project.local
         ln -s cabal.project.dist.freeze.ghc-${{ matrix.ghc-ver }} cabal.project.freeze
+    - uses: haskell/actions/setup@v1
+      id: setup-haskell
+      name: Setup Haskell
+      with:
+        ghc-version: ${{ matrix.ghc-ver }}
+        cabal-version: ${{ matrix.cabal }}
+    - name: Cache
+      uses: actions/cache@v1
+      with:
+        path: /home/runner/.cabal/store/ghc-${{ matrix.ghc-ver }}
+        # Prefer previous SHA hash if it is still cached
+        key: linux-${{ matrix.ghc-ver }}-${{ hashFiles('cabal.project.freeze') }}-${{ github.sha }}
+        # otherwise just use most recent build.
+        restore-keys: linux-${{ matrix.ghc-ver }}-${{ hashFiles('cabal.project.freeze') }}
     - name: Cabal update
       run: cabal update
     - name: Cabal build
