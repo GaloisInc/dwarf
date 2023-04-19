@@ -2,8 +2,9 @@
 module Main (main) where
 
 import           Control.Exception
---import           Control.Monad.IO
-import           Control.Monad.Reader
+import           Control.Monad (forM_, when)
+import           Control.Monad.IO.Class (MonadIO)
+import           Control.Monad.Reader (ReaderT(..))
 import qualified Data.ByteString as BS
 import           Data.Dwarf.Internals
 import           Data.Typeable
