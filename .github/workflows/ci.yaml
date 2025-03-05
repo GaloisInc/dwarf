@@ -28,7 +28,7 @@ jobs:
         ghc-version: ${{ matrix.ghc-ver }}
         cabal-version: ${{ matrix.cabal }}
     - name: Cache
-      uses: actions/cache@v1
+      uses: actions/cache@v4
       with:
         path: /home/runner/.cabal/store/ghc-${{ matrix.ghc-ver }}
         # Prefer previous SHA hash if it is still cached
