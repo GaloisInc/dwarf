@@ -1,4 +1,0 @@
--- This adds -Wall and -Werror for runs where we want to catch warnings.
-
-package galois-dwarf
-  ghc-options: -Wall -Werror
