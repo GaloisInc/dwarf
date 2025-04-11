@@ -4,40 +4,21 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
     strategy:
       matrix:
-        ghc-ver: ["9.6.2", "9.8.2", "9.10.1"]
-        cabal: ["3.12.1.0"]
-      # complete all jobs
+        cabal: ["3.14.2.0"]
+        ghc: ["9.6.2", "9.8.2", "9.10.1"]
+        os: ["ubuntu-24.04"]
       fail-fast: false
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-      with:
-        submodules: true
-    - name: Link cabal project files
-      run: |
-        ln -s cabal.project.dist                                  cabal.project
-        ln -s cabal.project.werror                                cabal.project.local
-        ln -s cabal.project.dist.freeze.ghc-${{ matrix.ghc-ver }} cabal.project.freeze
-    - uses: haskell-actions/setup@v2
-      id: setup-haskell
-      name: Setup Haskell
-      with:
-        ghc-version: ${{ matrix.ghc-ver }}
-        cabal-version: ${{ matrix.cabal }}
-    - name: Cache
-      uses: actions/cache@v4
-      with:
-        path: /home/runner/.cabal/store/ghc-${{ matrix.ghc-ver }}
-        # Prefer previous SHA hash if it is still cached
-        key: linux-${{ matrix.ghc-ver }}-${{ hashFiles('cabal.project.freeze') }}-${{ github.sha }}
-        # otherwise just use most recent build.
-        restore-keys: linux-${{ matrix.ghc-ver }}-${{ hashFiles('cabal.project.freeze') }}
-    - name: Cabal update
-      run: cabal update
-    - name: Cabal build
-      run: cabal build
-    - name: Cabal test
-      run: cabal test
+    uses: GaloisInc/.github/.github/workflows/haskell-ci.yml@v1.4
+    with:
+      cabal: ${{ matrix.cabal }}
+      check: false
+      # See Note [Parallelism] in the `haskell-ci` action for why `-j`.
+      configure-flags: --enable-tests --ghc-options='-Wall -Werror -j'
+      ghc: ${{ matrix.ghc }}
+      os: ${{ matrix.os }}
+      submodules: "true"
+      pre-hook: |
+        ln -s cabal.project.dist                              cabal.project
+        ln -s cabal.project.dist.freeze.ghc-${{ matrix.ghc }} cabal.project.freeze
