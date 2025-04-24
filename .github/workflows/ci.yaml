@@ -21,5 +21,5 @@ jobs:
       os: ${{ matrix.os }}
       submodules: "true"
       pre-hook: |
-        ln -s cabal.project.dist                              cabal.project
-        ln -s cabal.project.dist.freeze.ghc-${{ matrix.ghc }} cabal.project.freeze
+        ln -s cabal.project.dist                 cabal.project
+        ln -s cabal.ghc-${{ matrix.ghc }}.config cabal.project.freeze
