@@ -7,7 +7,11 @@ jobs:
     strategy:
       matrix:
         cabal: ["3.14.2.0"]
-        ghc: ["9.6.2", "9.8.2", "9.10.1"]
+        # We do not yet have a definitive GHC version support policy (see #17).
+        # Our current practice is to support at least the three most recent
+        # versions of GHC. We keep old versions in CI as long as doing so causes
+        # no undue burden.
+        ghc: ["9.6.2", "9.8.2", "9.10.1", "9.12.2"]
         os: ["ubuntu-24.04"]
       fail-fast: false
     uses: GaloisInc/.github/.github/workflows/haskell-ci.yml@v1
