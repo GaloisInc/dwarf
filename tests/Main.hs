@@ -7,7 +7,6 @@ import           Control.Monad.IO.Class (MonadIO)
 import           Control.Monad.Reader (ReaderT(..))
 import qualified Data.ByteString as BS
 import           Data.Dwarf.Internals
-import           Data.Typeable
 import           Data.IORef
 import           Data.Int
 import           Data.Word
@@ -24,7 +23,7 @@ newtype TestM a = TestM (ReaderT TestCtx IO a)
   deriving (Functor, Applicative, Monad, MonadIO)
 
 data TestException = TestException
-  deriving (Typeable, Show)
+  deriving Show
 
 instance Exception TestException
 
