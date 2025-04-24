@@ -10,7 +10,7 @@ jobs:
         ghc: ["9.6.2", "9.8.2", "9.10.1"]
         os: ["ubuntu-24.04"]
       fail-fast: false
-    uses: GaloisInc/.github/.github/workflows/haskell-ci.yml@v1
+    uses: GaloisInc/.github/.github/workflows/haskell-ci.yml@haskell-ci-check-freeze
     with:
       cabal: ${{ matrix.cabal }}
       check: false
