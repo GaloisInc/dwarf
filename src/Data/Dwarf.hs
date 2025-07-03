@@ -1,6 +1,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE TupleSections #-}
 
 -- | Parses the DWARF 2-5 specifications at http://www.dwarfstd.org given
 -- the debug sections in ByteString form.
@@ -497,11 +498,11 @@ getDIEAndDescendants cuContext thisId = do
   if abbrid == 0
     then pure Nothing
     else do
-      let abbrev = cuAbbrevMap cuContext M.! (AbbrevId abbrid)
+      let abbrev = cuAbbrevMap cuContext M.! AbbrevId abbrid
           tag = abbrevTag abbrev
       values <-
         forM (abbrevAttrForms abbrev) $ \(attr, form) -> do
-          (\val -> (attr, val)) <$> getForm cuContext form
+          (attr,) <$> getForm cuContext form
       children <-
         if abbrevChildren abbrev
           then getDieAndSiblings cuContext
@@ -533,8 +534,8 @@ getCUHeader (endian, dwarfSections) abbrevMapCache (CUOffset cuOff) = do
   addr_size <- getWord8
   postHeader <- Get.bytesRead
   tgt <- case addr_size of
-    4 -> pure $ TargetSize32
-    8 -> pure $ TargetSize64
+    4 -> pure TargetSize32
+    8 -> pure TargetSize64
     _ -> fail $ "Invalid address size: " ++ show addr_size
   (abbrevMap, nextAbbrevMapCache) <-
     case M.lookup abbrevOffset abbrevMapCache of
@@ -542,7 +543,7 @@ getCUHeader (endian, dwarfSections) abbrevMapCache (CUOffset cuOff) = do
       Nothing ->
         case getAbbrevMap abbrevOffset (dsAbbrevSection dwarfSections) of
           Left e -> fail e
-          Right m -> pure $ (m, M.insert abbrevOffset m abbrevMapCache)
+          Right m -> pure (m, M.insert abbrevOffset m abbrevMapCache)
   let ctx =
         CUContext
           { cuReader = reader endian enc tgt,
