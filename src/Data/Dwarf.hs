@@ -2,6 +2,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE InstanceSigs #-}
 
 -- | Parses the DWARF 2-5 specifications at http://www.dwarfstd.org given
 -- the debug sections in ByteString form.
@@ -13,7 +15,6 @@ module Data.Dwarf
 
     -- * Parsing
     Sections (..),
-    mkSections,
     CUContext,
     cuReader,
     cuSections,
@@ -112,47 +113,45 @@ inCU :: Integral a => CUOffset -> a -> DieID
 inCU (CUOffset base) x = DieID (base + fromIntegral x)
 
 -- | Sections to retrieve dwarf information.
-data Sections = Sections
-  { -- | @.debug_info@ contents
-    dsInfoSection :: B.ByteString,
-    -- | @.debug_abbrev@ contents
-    dsAbbrevSection :: B.ByteString,
-    -- | @.debug_aranges@ contents
-    dsArangesSection :: !B.ByteString,
-    -- | @.debug_line@ contents
-    dsLineSection :: !B.ByteString,
-    -- | @.debug_loc@ contents
-    dsLocSection :: !B.ByteString,
-    -- | @.debug_ranges@ contents
-    dsRangesSection :: !B.ByteString,
-    -- | @.debug_str@ contents
-    dsStrSection :: B.ByteString
-  }
+newtype Sections = SectionContents (B.ByteString -> Maybe B.ByteString)
 
--- | Create dwarf buffers from function that looks up section names.
-mkSections ::
-  Applicative m =>
-  -- | Function that looks up contents given section name.
-  (B.ByteString -> m B.ByteString) ->
-  m Sections
-mkSections f =
-  let mk info aranges abbrev lne loc ranges str =
-        Sections
-          { dsInfoSection = info,
-            dsArangesSection = aranges,
-            dsAbbrevSection = abbrev,
-            dsLineSection = lne,
-            dsLocSection = loc,
-            dsRangesSection = ranges,
-            dsStrSection = str
-          }
-   in mk <$> f ".debug_info"
-        <*> f ".debug_aranges"
-        <*> f ".debug_abbrev"
-        <*> f ".debug_line"
-        <*> f ".debug_loc"
-        <*> f ".debug_ranges"
-        <*> f ".debug_str"
+
+
+requiredSection :: (MonadFail m) => B.ByteString -> Sections -> m B.ByteString
+requiredSection nm (SectionContents sections) =
+  maybe (fail $ "Required section: " ++  show nm) pure (sections nm)
+
+dsStrSection ::(MonadFail m) => Sections -> m B.ByteString
+dsStrSection = requiredSection ".debug_str"
+
+dsAbbrevSection :: (MonadFail m) => Sections -> m B.ByteString
+dsAbbrevSection = requiredSection ".debug_abbrev"
+
+dsInfoSection :: (MonadFail m) => Sections -> m B.ByteString
+dsInfoSection = requiredSection ".debug_info"
+
+
+newtype StrError a = StrError (Either String a)
+
+instance Functor StrError where
+  fmap f (StrError x)= (StrError . fmap f) x
+
+instance Applicative StrError where
+  pure = StrError . pure
+  (<*>) (StrError f) (StrError v) = StrError (f <*> v)
+
+instance Monad StrError where
+  (>>=) :: StrError a -> (a -> StrError b) -> StrError b
+  (>>=) (StrError v) f =  
+    case v of 
+        Left s -> StrError $ Left s
+        Right uv -> f uv
+
+instance MonadFail StrError where
+  fail = StrError . Left
+
+eitherOfStrError :: StrError a -> Either String a 
+eitherOfStrError (StrError x) = x
 
 newtype DIEOffset = DIEOffset Word64
 -- ^ Offset in .debug_info of DIE relative from start of bufer.
@@ -457,7 +456,8 @@ getForm cuContext form = do
     DW_FORM_sdata -> DW_ATVAL_INT <$> getSLEB128
     DW_FORM_strp -> do
       offset <- desrGetOffset end (drEncoding dr)
-      let str = B.drop (fromIntegral offset) (dsStrSection dc)
+      ds_section <- dsStrSection dc
+      let str = B.drop (fromIntegral offset) ds_section
       pure $! DW_ATVAL_STRING (B.takeWhile (/= 0) str)
     DW_FORM_udata -> DW_ATVAL_UINT <$> getULEB128
     DW_FORM_ref_addr -> DW_ATVAL_UINT <$> desrGetOffset end enc
@@ -541,9 +541,11 @@ getCUHeader (endian, dwarfSections) abbrevMapCache (CUOffset cuOff) = do
     case M.lookup abbrevOffset abbrevMapCache of
       Just r -> pure (r, abbrevMapCache)
       Nothing ->
-        case getAbbrevMap abbrevOffset (dsAbbrevSection dwarfSections) of
-          Left e -> fail e
-          Right m -> pure (m, M.insert abbrevOffset m abbrevMapCache)
+        do 
+          abbrev <- dsAbbrevSection dwarfSections
+          case getAbbrevMap abbrevOffset abbrev of
+            Left e -> fail e
+            Right m -> pure (m, M.insert abbrevOffset m abbrevMapCache)
   let ctx =
         CUContext
           { cuReader = reader endian enc tgt,
@@ -564,7 +566,8 @@ getCUContext ::
   CUOffset ->
   Maybe (Either String CUContext)
 getCUContext end s m (CUOffset off) = do
-  let bs = B.drop (fromIntegral off) (dsInfoSection s)
+  info <- dsInfoSection s
+  let bs = B.drop (fromIntegral off) info
   if B.null bs
     then Nothing
     else case Get.runGetOrFail (getCUHeader (end, s) m (CUOffset off)) (L.fromChunks [bs]) of
@@ -576,8 +579,8 @@ dieAndDescendants ::
   DIEOffset ->
   Either String (Maybe DIE)
 dieAndDescendants ctx (DIEOffset off) = do
-  let sec = dsInfoSection (cuSections ctx)
-
+  sec <-  
+    eitherOfStrError $ dsInfoSection (cuSections ctx)
   let bs = L.fromChunks [B.drop (fromIntegral off) sec]
   let thisID = DieID off
   case Get.runGetOrFail (getDIEAndDescendants ctx thisID) bs of
