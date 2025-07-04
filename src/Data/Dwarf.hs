@@ -103,7 +103,8 @@ import Data.Dwarf.Reader
 import Data.Dwarf.TAG
 import Data.Dwarf.Types
 import qualified Data.Map.Strict as M
-import Data.Word (Word64)
+import Data.Word (Word64, Word8)
+import Debug.Trace (trace)
 
 -- | The offset of a compile unit in a file from
 -- the start of the file.
@@ -177,7 +178,8 @@ data CUContext = CUContext
     cuSections :: !Sections,
     cuDieOffset :: !DIEOffset,
     cuNextOffset :: !CUOffset,
-    cuNextAbbrevCache :: !(M.Map Word64 (M.Map AbbrevId DW_ABBREV))
+    cuNextAbbrevCache :: !(M.Map Word64 (M.Map AbbrevId DW_ABBREV)),
+    cuUnitType :: !(Maybe Word8)
   }
 
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -541,9 +543,20 @@ getCUHeader (endian, dwarfSections) abbrevMapCache (CUOffset cuOff) = do
   (enc, unitLength) <- getDwarfSize endian
   postLength <- Get.bytesRead
   let totalLength = fromIntegral (postLength - start) + unitLength
-  _version <- derGetW16 endian
-  abbrevOffset <- desrGetOffset endian enc
-  addr_size <- getWord8
+  version <- derGetW16 endian
+  let tversion = trace ("version: " ++ show version) version
+  unitType <- if tversion >= 5 then Just <$> getWord8 else pure Nothing
+  -- in v5 address_size first, in v4 abbrevoffset
+  (abbrevOffset, addr_size) <- if tversion >= 5 then 
+      do   
+        addr_sizeRd <- getWord8
+        abbrevOffsetRd <- desrGetOffset endian enc
+        pure (abbrevOffsetRd, addr_sizeRd)
+    else 
+      do
+        abbrevOffsetRd <- desrGetOffset endian enc
+        addr_sizeRd <- getWord8
+        pure (abbrevOffsetRd, addr_sizeRd)
   postHeader <- Get.bytesRead
   tgt <- case addr_size of
     4 -> pure TargetSize32
@@ -567,7 +580,8 @@ getCUHeader (endian, dwarfSections) abbrevMapCache (CUOffset cuOff) = do
             cuSections = dwarfSections,
             cuDieOffset = DIEOffset (cuOff + fromIntegral (postHeader - start)),
             cuNextOffset = CUOffset (cuOff + totalLength),
-            cuNextAbbrevCache = nextAbbrevMapCache
+            cuNextAbbrevCache = nextAbbrevMapCache,
+            cuUnitType = unitType
           }
   pure $! ctx
 
