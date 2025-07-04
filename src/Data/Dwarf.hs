@@ -69,6 +69,12 @@ module Data.Dwarf
     DW_OP (..),
     parseDW_OP,
     parseDW_OPs,
+    mkSections,
+    dsStrSection,
+    dsAbbrevSection,
+    dsInfoSection,
+    dsLineSection,
+    dsRangesSection,
     module Data.Dwarf.AT,
     module Data.Dwarf.ATE,
     module Data.Dwarf.TAG,
@@ -115,7 +121,8 @@ inCU (CUOffset base) x = DieID (base + fromIntegral x)
 -- | Sections to retrieve dwarf information.
 newtype Sections = SectionContents (B.ByteString -> Maybe B.ByteString)
 
-
+mkSections :: (B.ByteString -> Maybe B.ByteString) -> Sections
+mkSections = SectionContents
 
 requiredSection :: (MonadFail m) => B.ByteString -> Sections -> m B.ByteString
 requiredSection nm (SectionContents sections) =
@@ -130,6 +137,11 @@ dsAbbrevSection = requiredSection ".debug_abbrev"
 dsInfoSection :: (MonadFail m) => Sections -> m B.ByteString
 dsInfoSection = requiredSection ".debug_info"
 
+dsLineSection :: (MonadFail m) => Sections -> m B.ByteString
+dsLineSection = requiredSection ".debug_line"
+
+dsRangesSection :: (MonadFail m) => Sections -> m B.ByteString
+dsRangesSection = requiredSection ".debug_ranges"
 
 newtype StrError a = StrError (Either String a)
 
