@@ -129,7 +129,7 @@ requiredSection :: (MonadFail m) => B.ByteString -> Sections -> m B.ByteString
 requiredSection nm (SectionContents sections) =
   maybe (fail $ "Required section: " ++  show nm) pure (sections nm)
 
-dsStrSection ::(MonadFail m) => Sections -> m B.ByteString
+dsStrSection :: (MonadFail m) => Sections -> m B.ByteString
 dsStrSection = requiredSection ".debug_str"
 
 dsAbbrevSection :: (MonadFail m) => Sections -> m B.ByteString
@@ -143,6 +143,9 @@ dsLineSection = requiredSection ".debug_line"
 
 dsRangesSection :: (MonadFail m) => Sections -> m B.ByteString
 dsRangesSection = requiredSection ".debug_ranges"
+
+dsStrOffsets :: (MonadFail m) => Sections -> m B.ByteString
+dsStrOffsets = requiredSection ".debug_str_offsets"
 
 newtype StrError a = StrError (Either String a)
 
@@ -447,6 +450,25 @@ getDieAndSiblings cuContext = do
 unimplForm :: DW_FORM -> Get a
 unimplForm f = fail $ "Unimplemented attribute parser: " ++ show f
 
+
+getStringAttr :: Word64 -> Sections -> Get DW_ATVAL
+getStringAttr offset secs = 
+  do 
+      strsec <- dsStrSection secs
+      let str = B.drop (fromIntegral offset) strsec
+      pure $! DW_ATVAL_STRING (B.takeWhile (/= 0) str)
+
+parseStrx :: Get Word64 -> Get Word64 -> Sections -> Get DW_ATVAL 
+parseStrx offsetTableGet getOffset secs = 
+  do 
+    w <- offsetTableGet
+    dsstr <- dsStrOffsets secs
+    offset <- case Get.runGetOrFail getOffset (L.fromChunks [B.drop (fromIntegral w) dsstr]) of
+                Left (_, _, msg) ->  fail msg
+                Right (_, _, readOffset) -> pure readOffset
+    getStringAttr offset secs
+
+
 getForm :: CUContext -> DW_FORM -> Get DW_ATVAL
 getForm cuContext form = do
   let dr = cuReader cuContext
@@ -455,6 +477,10 @@ getForm cuContext form = do
   let end = drEndianess dr
       enc = drEncoding dr
       tgt = drTarget64 dr
+  let parseStrxOfBytesz getter = 
+        do 
+          off <- getter
+          parseStrx (pure $ fromIntegral off) (desrGetOffset end enc) dc
   case form of
     DW_FORM_addr -> DW_ATVAL_UINT . fromIntegral <$> getTargetAddress end tgt
     DW_FORM_block2 -> DW_ATVAL_BLOB <$> getByteStringLen (derGetW16 end)
@@ -470,9 +496,7 @@ getForm cuContext form = do
     DW_FORM_sdata -> DW_ATVAL_INT <$> getSLEB128
     DW_FORM_strp -> do
       offset <- desrGetOffset end (drEncoding dr)
-      ds_section <- dsStrSection dc
-      let str = B.drop (fromIntegral offset) ds_section
-      pure $! DW_ATVAL_STRING (B.takeWhile (/= 0) str)
+      getStringAttr offset dc
     DW_FORM_udata -> DW_ATVAL_UINT <$> getULEB128
     DW_FORM_ref_addr -> DW_ATVAL_UINT <$> desrGetOffset end enc
     DW_FORM_ref1 -> DW_ATVAL_REF . inCU cu <$> getWord8
@@ -486,7 +510,7 @@ getForm cuContext form = do
     DW_FORM_exprloc -> DW_ATVAL_BLOB <$> getByteStringLen getULEB128
     DW_FORM_flag_present -> pure $ DW_ATVAL_BOOL True
     DW_FORM_ref_sig8 -> DW_ATVAL_UINT . fromIntegral <$> derGetW64 end
-    DW_FORM_strx -> unimplForm form
+    DW_FORM_strx -> parseStrxOfBytesz getULEB128
     DW_FORM_addrx -> unimplForm form
     DW_FORM_ref_sup4 -> unimplForm form
     DW_FORM_strp_sup -> unimplForm form
@@ -496,10 +520,10 @@ getForm cuContext form = do
     DW_FORM_loclistx -> unimplForm form
     DW_FORM_rnglistx -> undefined
     DW_FORM_ref_sup8 -> undefined
-    DW_FORM_strx1 -> unimplForm form
-    DW_FORM_strx2 -> unimplForm form
+    DW_FORM_strx1 -> parseStrxOfBytesz getWord8
+    DW_FORM_strx2 -> parseStrxOfBytesz (derGetW16 end)
     DW_FORM_strx3 -> unimplForm form
-    DW_FORM_strx4 -> unimplForm form
+    DW_FORM_strx4 -> parseStrxOfBytesz (derGetW32 end)
     DW_FORM_addrx1 -> unimplForm form
     DW_FORM_addrx2 -> unimplForm form
     DW_FORM_addrx3 -> unimplForm form
