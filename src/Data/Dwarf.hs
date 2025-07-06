@@ -147,6 +147,9 @@ dsRangesSection = requiredSection ".debug_ranges"
 dsStrOffsets :: (MonadFail m) => Sections -> m B.ByteString
 dsStrOffsets = requiredSection ".debug_str_offsets"
 
+dsAddr :: (MonadFail m) => Sections -> m B.ByteString
+dsAddr = requiredSection ".debug_addr"
+
 newtype StrError a = StrError (Either String a)
 
 instance Functor StrError where
@@ -458,15 +461,46 @@ getStringAttr offset secs =
       let str = B.drop (fromIntegral offset) strsec
       pure $! DW_ATVAL_STRING (B.takeWhile (/= 0) str)
 
-parseStrx :: Get Word64 -> Get Word64 -> Sections -> Get DW_ATVAL 
-parseStrx offsetTableGet getOffset secs = 
+
+
+parseFromOffsetTable :: Get B.ByteString -> Sections ->  (Word64 -> Sections -> Get DW_ATVAL) -> Get Word64 -> Get Word64 -> Get DW_ATVAL 
+parseFromOffsetTable sec secs builder offsetTableGet getOffset = 
+    do 
+      w <- offsetTableGet
+      dsstr <- sec
+      offset <- case Get.runGetOrFail getOffset (L.fromChunks [B.drop (fromIntegral w) dsstr]) of
+                  Left (_, _, msg) ->  fail msg
+                  Right (_, _, readOffset) -> pure readOffset
+      builder offset secs
+  
+
+parseStrx :: Sections -> Get Word64 -> Get Word64 -> Get DW_ATVAL 
+parseStrx secs  = 
+  parseFromOffsetTable (dsStrOffsets secs) secs getStringAttr
+
+
+
+getTargetAddressFromOff :: Endianess -> TargetSize -> Word64 -> Get DW_ATVAL 
+getTargetAddressFromOff end sz off = 
   do 
-    w <- offsetTableGet
-    dsstr <- dsStrOffsets secs
-    offset <- case Get.runGetOrFail getOffset (L.fromChunks [B.drop (fromIntegral w) dsstr]) of
-                Left (_, _, msg) ->  fail msg
-                Right (_, _, readOffset) -> pure readOffset
-    getStringAttr offset secs
+    _ <- Get.skip (fromIntegral off)
+    DW_ATVAL_UINT <$> getTargetAddress end sz
+
+
+buildAddress :: Endianess -> TargetSize ->  Word64 -> Sections -> Get DW_ATVAL
+buildAddress end tgt off secs = 
+  do 
+    bs <- dsAddr secs
+    let res = Get.runGetOrFail (getTargetAddressFromOff end tgt off) (L.fromChunks [bs])
+    case res of 
+      Left (_,_, err) -> fail err
+      Right (_,_,addr) -> pure addr
+
+parseAddrx :: Endianess -> TargetSize -> Sections -> Get Word64 -> Get Word64 -> Get DW_ATVAL 
+parseAddrx endian tgt secs = 
+  parseFromOffsetTable (dsAddr secs) secs (buildAddress endian tgt)
+
+
 
 
 getForm :: CUContext -> DW_FORM -> Get DW_ATVAL
@@ -477,10 +511,12 @@ getForm cuContext form = do
   let end = drEndianess dr
       enc = drEncoding dr
       tgt = drTarget64 dr
-  let parseStrxOfBytesz getter = 
+  let parseIntegralOff getter f = 
         do 
           off <- getter
-          parseStrx (pure $ fromIntegral off) (desrGetOffset end enc) dc
+          f dc (pure $ fromIntegral off) (desrGetOffset end enc) 
+  let parseStrxOfBytesz getter = parseIntegralOff getter parseStrx
+  let parseAddrxOfBytesz getter = parseIntegralOff getter (parseAddrx end tgt)
   case form of
     DW_FORM_addr -> DW_ATVAL_UINT . fromIntegral <$> getTargetAddress end tgt
     DW_FORM_block2 -> DW_ATVAL_BLOB <$> getByteStringLen (derGetW16 end)
@@ -511,7 +547,7 @@ getForm cuContext form = do
     DW_FORM_flag_present -> pure $ DW_ATVAL_BOOL True
     DW_FORM_ref_sig8 -> DW_ATVAL_UINT . fromIntegral <$> derGetW64 end
     DW_FORM_strx -> parseStrxOfBytesz getULEB128
-    DW_FORM_addrx -> unimplForm form
+    DW_FORM_addrx -> parseAddrxOfBytesz getULEB128
     DW_FORM_ref_sup4 -> unimplForm form
     DW_FORM_strp_sup -> unimplForm form
     DW_FORM_data16 -> unimplForm form
@@ -522,12 +558,12 @@ getForm cuContext form = do
     DW_FORM_ref_sup8 -> undefined
     DW_FORM_strx1 -> parseStrxOfBytesz getWord8
     DW_FORM_strx2 -> parseStrxOfBytesz (derGetW16 end)
-    DW_FORM_strx3 -> unimplForm form
+    DW_FORM_strx3 -> parseStrxOfBytesz (derGetW24 end)
     DW_FORM_strx4 -> parseStrxOfBytesz (derGetW32 end)
-    DW_FORM_addrx1 -> unimplForm form
-    DW_FORM_addrx2 -> unimplForm form
-    DW_FORM_addrx3 -> unimplForm form
-    DW_FORM_addrx4 -> unimplForm form
+    DW_FORM_addrx1 -> parseAddrxOfBytesz getWord8
+    DW_FORM_addrx2 -> parseAddrxOfBytesz (derGetW16 end)
+    DW_FORM_addrx3 -> parseAddrxOfBytesz (derGetW24 end)
+    DW_FORM_addrx4 -> parseAddrxOfBytesz (derGetW32 end)
     _ -> unimplForm form
 
 getDIEAndDescendants :: CUContext -> DieID -> Get (Maybe DIE)

@@ -15,6 +15,7 @@ module Data.Dwarf.Reader
   , getTargetAddress
   , derGetW16
   , derGetW32
+  , derGetW24
   , derGetW64
   , derGetI16
   , derGetI32
@@ -23,13 +24,33 @@ module Data.Dwarf.Reader
   , drTarget64
   ) where
 
-import           Data.Binary.Get
-  ( Get
+import           Data.Binary.Get  ( Get
   , getWord16be, getWord32be, getWord64be
   , getWord16le, getWord32le, getWord64le
   )
+
+import           qualified Data.Binary.Get.Internal as GI
+
 import           Data.Int (Int16, Int32, Int64)
+import           qualified Data.ByteString as B
+import           qualified Data.ByteString.Unsafe as B
+import           qualified Data.Bits as Bits
+
 import           Data.Word (Word16, Word32, Word64)
+
+-- TODO: Use a type with 24 bits
+word24le :: B.ByteString -> Word32
+word24le s = fromIntegral (s `B.unsafeIndex` 0) Bits..|. (fromIntegral (s `B.unsafeIndex` 1) `Bits.unsafeShiftL` 8) Bits..|. (fromIntegral (s `B.unsafeIndex` 2) `Bits.unsafeShiftL` 16)
+
+word24be :: B.ByteString -> Word32
+word24be s = fromIntegral (s `B.unsafeIndex` 2) Bits..|. (fromIntegral (s `B.unsafeIndex` 1) `Bits.unsafeShiftL` 1) Bits..|. (fromIntegral (s `B.unsafeIndex` 0) `Bits.unsafeShiftL` 16)
+
+getWord24be :: Get Word32
+getWord24be = GI.readN 3 word24be
+
+getWord24le :: Get Word32
+getWord24le = GI.readN 3 word24le
+
 
 -- | Ordering bytes are encoded in buffers.
 data Endianess = LittleEndian | BigEndian
@@ -60,6 +81,14 @@ derGetW64 end =
   case end of
     LittleEndian -> getWord64le
     BigEndian    -> getWord64be
+
+
+derGetW24 :: Endianess -> Get Word32
+derGetW24 end =
+  case end of
+    LittleEndian -> getWord24le
+    BigEndian    -> getWord24be
+
 
 derGetI16 :: Endianess -> Get Int16
 derGetI16 end = fromIntegral <$> derGetW16 end
