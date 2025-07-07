@@ -4,6 +4,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE LambdaCase #-}
 
 -- | Parses the DWARF 2-5 specifications at http://www.dwarfstd.org given
 -- the debug sections in ByteString form.
@@ -105,6 +106,8 @@ import Data.Dwarf.Types
 import qualified Data.Map.Strict as M
 import Data.Word (Word64, Word8)
 import Debug.Trace (trace)
+import qualified Data.List as List
+import Data.Maybe (fromMaybe)
 
 -- | The offset of a compile unit in a file from
 -- the start of the file.
@@ -185,7 +188,9 @@ data CUContext = CUContext
     cuDieOffset :: !DIEOffset,
     cuNextOffset :: !CUOffset,
     cuNextAbbrevCache :: !(M.Map Word64 (M.Map AbbrevId DW_ABBREV)),
-    cuUnitType :: !(Maybe Word8)
+    cuUnitType :: !(Maybe Word8),
+    cuAddrBase :: !(Maybe Word64),
+    cuStringOffsetBase :: !(Maybe Word64)
   }
 
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -483,7 +488,7 @@ parseStrx secs  =
 getTargetAddressFromOff :: Endianess -> TargetSize -> Word64 -> Get DW_ATVAL 
 getTargetAddressFromOff end sz off = 
   do 
-    _ <- Get.skip (fromIntegral off)
+    _ <- trace ("Offset: " ++ show off) (Get.skip (fromIntegral off))
     DW_ATVAL_UINT <$> getTargetAddress end sz
 
 
@@ -496,6 +501,8 @@ buildAddress end tgt off secs =
       Left (_,_, err) -> fail err
       Right (_,_,addr) -> pure addr
 
+
+-- TODO: Need the base 
 parseAddrx :: Endianess -> TargetSize -> Sections -> Get Word64 -> Get Word64 -> Get DW_ATVAL 
 parseAddrx endian tgt secs = 
   parseFromOffsetTable (dsAddr secs) secs (buildAddress endian tgt)
@@ -511,12 +518,13 @@ getForm cuContext form = do
   let end = drEndianess dr
       enc = drEncoding dr
       tgt = drTarget64 dr
-  let parseIntegralOff getter f = 
+  let parseIntegralOff getter f maybeBase = 
         do 
+          let base = fromMaybe 0 maybeBase
           off <- getter
-          f dc (pure $ fromIntegral off) (desrGetOffset end enc) 
-  let parseStrxOfBytesz getter = parseIntegralOff getter parseStrx
-  let parseAddrxOfBytesz getter = parseIntegralOff getter (parseAddrx end tgt)
+          f dc (pure (fromIntegral off + base)) (desrGetOffset end enc) 
+  let parseStrxOfBytesz getter = parseIntegralOff getter parseStrx (cuStringOffsetBase cuContext)
+  let parseAddrxOfBytesz getter = parseIntegralOff getter (parseAddrx end tgt) (cuAddrBase cuContext)
   case form of
     DW_FORM_addr -> DW_ATVAL_UINT . fromIntegral <$> getTargetAddress end tgt
     DW_FORM_block2 -> DW_ATVAL_BLOB <$> getByteStringLen (derGetW16 end)
@@ -566,6 +574,25 @@ getForm cuContext form = do
     DW_FORM_addrx4 -> parseAddrxOfBytesz (derGetW32 end)
     _ -> unimplForm form
 
+
+
+extractAttr :: DW_AT -> [(DW_AT, DW_ATVAL)] -> Maybe DW_ATVAL
+extractAttr key = fmap snd . List.find (\x -> key == fst x)
+
+extractBase :: DW_AT -> [(DW_AT, DW_ATVAL)] -> Maybe Word64 
+extractBase key vs = (\case DW_ATVAL_UINT x -> Just x; _ -> Nothing) =<< extractAttr key vs 
+
+
+orElse :: Maybe a -> Maybe a -> Maybe a
+orElse left right = maybe left Just right 
+
+updateBases :: CUContext -> DW_TAG -> [(DW_AT, DW_ATVAL)] -> CUContext
+updateBases cuCtx DW_TAG_compile_unit  values = 
+      let addrOff = orElse (cuAddrBase cuCtx) (extractBase DW_AT_addr_base values)
+          stringOff = orElse (cuStringOffsetBase cuCtx) (extractBase DW_AT_str_offsets_base values) in
+        cuCtx {cuAddrBase = addrOff, cuStringOffsetBase = stringOff}
+updateBases cuCtx _ _ = cuCtx
+
 getDIEAndDescendants :: CUContext -> DieID -> Get (Maybe DIE)
 getDIEAndDescendants cuContext thisId = do
   abbrid <- getULEB128
@@ -577,9 +604,10 @@ getDIEAndDescendants cuContext thisId = do
       values <-
         forM (abbrevAttrForms abbrev) $ \(attr, form) -> do
           (attr,) <$> getForm cuContext form
+      let updatedCuContext = updateBases cuContext tag values
       children <-
         if abbrevChildren abbrev
-          then getDieAndSiblings cuContext
+          then getDieAndSiblings updatedCuContext
           else pure []
       pure $
         Just $
@@ -588,7 +616,7 @@ getDIEAndDescendants cuContext thisId = do
               dieTag = tag,
               dieAttributes = values,
               dieChildren = children,
-              dieReader = cuReader cuContext
+              dieReader = cuReader updatedCuContext
             }
 
 getCUHeader ::
@@ -641,7 +669,9 @@ getCUHeader (endian, dwarfSections) abbrevMapCache (CUOffset cuOff) = do
             cuDieOffset = DIEOffset (cuOff + fromIntegral (postHeader - start)),
             cuNextOffset = CUOffset (cuOff + totalLength),
             cuNextAbbrevCache = nextAbbrevMapCache,
-            cuUnitType = unitType
+            cuUnitType = unitType,
+            cuAddrBase = Nothing,
+            cuStringOffsetBase = Nothing
           }
   pure $! ctx
 
