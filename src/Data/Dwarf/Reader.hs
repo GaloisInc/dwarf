@@ -7,8 +7,10 @@ module Data.Dwarf.Reader
   , drEncoding
   , Endianess(..)
   , Encoding(..)
+  , encodingByteSize
   , TargetSize(..)
   , largestTargetAddress
+  , targetPtrByteSize
   , getDwarfSize
   , sizeHeaderByteCount
   , desrGetOffset
@@ -37,6 +39,7 @@ import           qualified Data.ByteString.Unsafe as B
 import           qualified Data.Bits as Bits
 
 import           Data.Word (Word16, Word32, Word64)
+import Debug.Trace (trace)
 
 -- TODO: Use a type with 24 bits
 word24le :: B.ByteString -> Word32
@@ -63,6 +66,10 @@ data Encoding = Encoding32 | Encoding64
 -- | Width of pointers in target.
 data TargetSize = TargetSize32 | TargetSize64
   deriving (Eq, Ord, Read, Show)
+
+targetPtrByteSize :: TargetSize -> Word64
+targetPtrByteSize TargetSize64 = 8
+targetPtrByteSize TargetSize32 = 4
 
 derGetW16 :: Endianess -> Get Word16
 derGetW16 end =
@@ -105,6 +112,11 @@ data EndianSizeReader = EndianSizeReader
   , desrEncoding :: !Encoding
   }
 
+
+encodingByteSize :: Encoding -> Word64
+encodingByteSize Encoding64 = 8
+encodingByteSize Encoding32 = 4
+
 desrGetOffset :: Endianess -> Encoding -> Get Word64
 desrGetOffset endianess enc =
   case enc of
@@ -142,9 +154,9 @@ largestTargetAddress tgt =
 -- | Action for reading a pointer for the target machine.
 getTargetAddress :: Endianess -> TargetSize -> Get Word64
 getTargetAddress end tgt =
-  case tgt of
+  trace "Getting target address" (case tgt of
     TargetSize64 -> derGetW64 end
-    TargetSize32 -> fromIntegral <$> derGetW32 end
+    TargetSize32 -> fromIntegral <$> derGetW32 end)
 
 drEndianess :: Reader -> Endianess
 drEndianess = desrEndianess . drDesr
