@@ -9,6 +9,7 @@ import           Data.Dwarf.Internals
 import           Data.Dwarf.Reader
 import           Data.Int (Int8, Int64)
 import           Data.Word (Word8, Word64)
+import Data.Dwarf.Form
 
 -- Section 7.21 - Line Number Information
 data DW_LNI
@@ -196,12 +197,33 @@ getDebugLineFileNames = go []
             file_length <- getULEB128
             go ((fileName, dir_index, last_mod, file_length):prev)
 
-getLNE :: Endianess -> TargetSize -> Get ([B.ByteString], [DW_LNE])
-getLNE endianess target64 = do
-    (enc, size) <- getDwarfSize endianess
-    pos <- Get.bytesRead
-    let endPos = fromIntegral pos + size
-    _version                   <- derGetW16 endianess
+
+data LineFileEntryFormat = LineFileEntryFormat {contentType :: Word64, form:: DW_FORM}
+
+
+
+
+parseFormList :: Int -> Get [LineFileEntryFormat]
+parseFormList ct = undefined
+
+
+
+parseLNEV5 :: Endianess -> TargetSize -> Encoding ->  Get Int 
+parseLNEV5 endianess target64 enc = do 
+    _addrSize <- getWord8
+    _segSelectorSize <- getWord8
+    _header_length      <- desrGetOffset endianess enc
+    minimum_instruction_length <- getWord8
+    maximum_operations_per_instruction <- getWord8
+    default_is_stmt            <- (/= 0) <$> getWord8
+    line_base                  <- get :: Get Int8
+    line_range                 <- getWord8
+    opcode_base                <- getWord8
+    _standard_opcode_lengths   <- replicateM (fromIntegral opcode_base - 1) getWord8
+    undefined
+
+parseLNEV4 :: Endianess -> TargetSize -> Encoding -> Get Int 
+parseLNEV4 endianess target64 enc = do 
     _header_length             <- desrGetOffset endianess enc
     minimum_instruction_length <- getWord8
     default_is_stmt            <- (/= 0) <$> getWord8
@@ -211,6 +233,16 @@ getLNE endianess target64 = do
     _standard_opcode_lengths   <- replicateM (fromIntegral opcode_base - 1) getWord8
     _include_directories       <- whileM (\b -> not (B.null b)) getByteStringNul
     file_names                 <- getDebugLineFileNames
+    undefined 
+
+{-
+getLNE :: Endianess -> TargetSize -> Get ([B.ByteString], [DW_LNE])
+getLNE endianess target64 = do
+    (enc, size) <- getDwarfSize endianess
+    pos <- Get.bytesRead
+    let endPos = fromIntegral pos + size
+    _version                   <- derGetW16 endianess
+
     curPos <- fromIntegral <$> Get.bytesRead
     -- Check if we have reached the end of the section.
     if endPos <= curPos
@@ -223,4 +255,4 @@ getLNE endianess target64 = do
             fromIntegral minimum_instruction_length
         let initial_state = defaultLNE default_is_stmt file_names
             line_matrix = stepLineMachine default_is_stmt minimum_instruction_length initial_state line_program
-         in pure (map (\(name, _, _, _) -> name) file_names, line_matrix)
+         in pure (map (\(name, _, _, _) -> name) file_names, line_matrix)-}
