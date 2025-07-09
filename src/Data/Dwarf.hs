@@ -453,6 +453,8 @@ interpretStrx end enc secs (SectionOffset addrOff) =
         Right (_,_,raddr) -> pure raddr
     getStringAttr strOff secs
 
+-- | A parsed attribute form. We allow addrx and strx to be delayed (as a function from a 'CUContext' to a fallible monad)
+-- in order to evaluate strx/addrx after observing the str offste base and address base
 data ParsedForm m =
   DelayedAttr (CUContext -> m DW_ATVAL)
   | RealizedAttr DW_ATVAL
@@ -504,12 +506,12 @@ getForm cuContext form = do
 orElse :: Maybe a -> Maybe a -> Maybe a
 orElse left right = maybe left Just right
 
-
 unpackDelayed :: (Monad m) => CUContext -> ParsedForm m -> m DW_ATVAL
 unpackDelayed ctx (DelayedAttr f) = f ctx
 unpackDelayed _ (RealizedAttr attr) = pure attr
 
 -- TODO: I really wish we had lenses here
+-- | Update a CUContext field if the attributes are equal
 updateFld :: (CUContext -> Maybe Word64) -> (CUContext -> Maybe Word64 -> CUContext) -> DW_AT -> DW_AT ->  ParsedForm (StateT CUContext Get) -> StateT CUContext Get ()
 updateFld getter setter expectedAt actAt val =
   do
@@ -519,7 +521,8 @@ updateFld getter setter expectedAt actAt val =
         let nval = setter ctx (orElse (getter ctx) ((\case DW_ATVAL_UINT x -> Just x; _ -> Nothing) uval)) in
           put nval
 
-
+-- | Compute attribute values from a list of form codes. State mantains the value of addrbase and
+-- string offset base wihtin the 'CUContext'
 computeAttrs :: [(DW_AT, DW_FORM)] -> StateT CUContext Get [(DW_AT, ParsedForm (StateT CUContext Get) )]
 computeAttrs abbrevs =
           forM abbrevs $
@@ -538,8 +541,9 @@ getDIEAndDescendants cuContext thisId = do
     else do
       let abbrev = cuAbbrevMap cuContext M.! AbbrevId abbrid
           tag = abbrevTag abbrev
-
+      -- Compute values and the CuContext (potentially updating str offset and addr bases)
       (values, updatedCuContext) <- runStateT (computeAttrs (abbrevAttrForms abbrev)) cuContext
+      -- use the updated context to evaluate delayed attributes
       realizedValues <- forM values (\(at, prsed) -> 
         let m = unpackDelayed updatedCuContext prsed in 
           (at,) <$> evalStateT m cuContext)
