@@ -105,7 +105,6 @@ import Data.Dwarf.TAG
 import Data.Dwarf.Types
 import qualified Data.Map.Strict as M
 import Data.Word (Word64, Word8)
-import Debug.Trace (trace)
 import Data.Maybe (fromMaybe)
 import Control.Monad.Trans.State (StateT (runStateT), get, put, evalStateT)
 import Control.Monad.Trans.Class (lift)
@@ -438,7 +437,7 @@ interpretAddrx end tgt secs (SectionOffset addrOff)  =
        case Get.runGetOrFail (getTargetAddress end tgt) (L.fromChunks [B.drop (fromIntegral addrOff) addrSec]) of
         Left (_,_, err) -> fail ("interpretAddrx: " ++ err)
         Right (_,_,raddr) -> pure raddr
-    pure  $ DW_ATVAL_UINT $ trace ( "Interpreted addr: " ++ show addr) addr
+    pure  $ DW_ATVAL_UINT addr
 
 
 -- desrGetOffset end (drEncoding dr)
@@ -449,7 +448,7 @@ interpretStrx end enc secs (SectionOffset addrOff) =
     strOff <-
        case Get.runGetOrFail (desrGetOffset end enc) (L.fromChunks [B.drop (fromIntegral addrOff) strOffStr]) of
         Left (_,_, err) -> fail ("interpretStrx: " ++ err)
-        Right (_,_,raddr) -> trace ("interpretStrx: " ++ show raddr) pure raddr
+        Right (_,_,raddr) -> pure raddr
     getStringAttr strOff secs
 
 
@@ -458,7 +457,7 @@ data ParsedForm m =
   | RealizedAttr DW_ATVAL
 
 getForm :: MonadFail m => CUContext -> DW_FORM -> Get (ParsedForm m)
-getForm cuContext form = trace ("Working form " ++ show form) (do
+getForm cuContext form = do
   let dr = cuReader cuContext
   let cu = cuOffset cuContext
   let dc = cuSections cuContext
@@ -486,7 +485,7 @@ getForm cuContext form = trace ("Working form " ++ show form) (do
     DW_FORM_ref8 -> RealizedAttr . DW_ATVAL_REF . inCU cu <$> derGetW64 end
     DW_FORM_ref_udata ->  RealizedAttr . DW_ATVAL_REF . inCU cu <$> getULEB128
     DW_FORM_indirect -> getForm cuContext . DW_FORM =<< getULEB128
-    _ -> RealizedAttr <$> getRealizedForm dc end enc tgt form )
+    _ -> RealizedAttr <$> getRealizedForm dc end enc tgt form
   where
       parseIntegralOff :: (MonadFail m, Show a, Integral a) => Sections -> Get a -> (Sections -> SectionOffset-> m DW_ATVAL) -> (CUContext -> Maybe Word64) -> Word64 -> Get (ParsedForm m)
       parseIntegralOff sections getter f getBase addrSize =
@@ -495,7 +494,7 @@ getForm cuContext form = trace ("Working form " ++ show form) (do
           let off = (fromIntegral index) * addrSize
           pure $ DelayedAttr (\ctx ->
               let base = fromMaybe 0 (getBase ctx)
-                  secOff = SectionOffset (fromIntegral (trace ("off: " ++ show off ++ " base: " ++ show base) off) + base) in
+                  secOff = SectionOffset (fromIntegral off + base) in
                   f sections secOff)
 
 orElse :: Maybe a -> Maybe a -> Maybe a
@@ -568,7 +567,7 @@ getCUHeader (endian, dwarfSections) abbrevMapCache (CUOffset cuOff) = do
   postLength <- Get.bytesRead
   let totalLength = fromIntegral (postLength - start) + unitLength
   version <- derGetW16 endian
-  let tversion = trace ("version: " ++ show version) version
+  let tversion = version
   unitType <- if tversion >= 5 then Just <$> getWord8 else pure Nothing
   -- in v5 address_size first, in v4 abbrevoffset
   (abbrevOffset, addr_size) <- if tversion >= 5 then
