@@ -106,7 +106,6 @@ import Data.Dwarf.Types
 import qualified Data.Map.Strict as M
 import Data.Word (Word64, Word8)
 import Debug.Trace (trace)
-import qualified Data.List as List
 import Data.Maybe (fromMaybe)
 import Control.Monad.Trans.State (StateT (runStateT), get, put, evalStateT)
 import Control.Monad.Trans.Class (lift)

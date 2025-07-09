@@ -220,10 +220,10 @@ pattern DW_LNCT_size :: DW_LNCT
 pattern DW_LNCT_size = DW_LNCT 0x4
 
 
-data LineFileEntryFormat = LineFileEntryFormat {contentType :: DW_LNCT, form:: DW_FORM}
+data LineFileEntryFormat = LineFileEntryFormat {contentType :: DW_LNCT, formCode :: DW_FORM}
 
 parseLineEntryToVal ::  Sections -> Endianess -> Encoding -> TargetSize -> LineFileEntryFormat -> Get (DW_LNCT,DW_ATVAL)
-parseLineEntryToVal secs end encoding tgt (LineFileEntryFormat {contentType=ct, form=form'}) = 
+parseLineEntryToVal secs end encoding tgt (LineFileEntryFormat {contentType=ct, formCode=form'}) = 
     (ct,) <$> getRealizedForm secs end encoding tgt form'
         
 
@@ -231,8 +231,8 @@ parseLineEntryToVal secs end encoding tgt (LineFileEntryFormat {contentType=ct, 
 parseFileEntryForm :: Get LineFileEntryFormat
 parseFileEntryForm = do
     contentTy <- getULEB128
-    formCode <- getULEB128
-    pure $ LineFileEntryFormat {contentType=DW_LNCT contentTy, form=DW_FORM formCode}
+    formCode' <- getULEB128
+    pure $ LineFileEntryFormat {contentType=DW_LNCT contentTy, formCode=DW_FORM formCode'}
 
 parseFormList :: Int -> Get [LineFileEntryFormat]
 parseFormList ct = 
