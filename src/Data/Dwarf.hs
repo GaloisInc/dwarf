@@ -449,7 +449,6 @@ interpretStrx end enc secs (SectionOffset addrOff) =
         Right (_,_,raddr) -> pure raddr
     getStringAttr strOff secs
 
-
 data ParsedForm m =
   DelayedAttr (CUContext -> m DW_ATVAL)
   | RealizedAttr DW_ATVAL

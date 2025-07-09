@@ -39,7 +39,6 @@ import           qualified Data.ByteString.Unsafe as B
 import           qualified Data.Bits as Bits
 
 import           Data.Word (Word16, Word32, Word64)
-import Debug.Trace (trace)
 
 -- TODO: Use a type with 24 bits
 word24le :: B.ByteString -> Word32
@@ -153,10 +152,9 @@ largestTargetAddress tgt =
 
 -- | Action for reading a pointer for the target machine.
 getTargetAddress :: Endianess -> TargetSize -> Get Word64
-getTargetAddress end tgt =
-  trace "Getting target address" (case tgt of
+getTargetAddress end tgt = case tgt of
     TargetSize64 -> derGetW64 end
-    TargetSize32 -> fromIntegral <$> derGetW32 end)
+    TargetSize32 -> fromIntegral <$> derGetW32 end
 
 drEndianess :: Reader -> Endianess
 drEndianess = desrEndianess . drDesr
