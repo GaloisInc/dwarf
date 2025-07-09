@@ -204,6 +204,7 @@ getDebugLineFileNames = go []
             file_length <- getULEB128
             go ((fileName, dir_index, last_mod, file_length):prev)
 
+-- | A line program header content type
 newtype DW_LNCT = DW_LNCT Word64 
       deriving (Eq,Ord)
 
@@ -216,24 +217,30 @@ pattern DW_LNCT_directory_index = DW_LNCT 0x2
 pattern DW_LNCT_size :: DW_LNCT
 pattern DW_LNCT_size = DW_LNCT 0x4
 
+-- | An entry form which is a pair of the content type and form code
 data LineFileEntryFormat = LineFileEntryFormat {contentType :: DW_LNCT, formCode :: DW_FORM}
 
-parseLineEntryToVal ::  Sections -> Endianess -> Encoding -> TargetSize -> LineFileEntryFormat -> Get (DW_LNCT,DW_ATVAL)
+-- | Parse a single line entry given a specified format
+parseLineEntryToVal ::  Sections -> Endianess -> Encoding -> TargetSize -> LineFileEntryFormat -> Get (DW_LNCT, DW_ATVAL)
 parseLineEntryToVal secs end encoding tgt (LineFileEntryFormat {contentType=ct, formCode=form'}) = 
     (ct,) <$> getRealizedForm secs end encoding tgt form'
 
+-- | Parses an entry format (pair of content type and form code)
 parseFileEntryForm :: Get LineFileEntryFormat
 parseFileEntryForm = do
     contentTy <- getULEB128
     formCode' <- getULEB128
     pure $ LineFileEntryFormat {contentType=DW_LNCT contentTy, formCode=DW_FORM formCode'}
 
+-- | Parses a list of line entry formats
 parseFormList :: Int -> Get [LineFileEntryFormat]
 parseFormList ct = 
     replicateM ct parseFileEntryForm
 
+-- | A v5 line header entry which maps content types to their values
 data FileLineHeaderEntry = FileLineHeaderEntry (Map.Map DW_LNCT DW_ATVAL)
 
+-- | Parse a v5 header file entry by parsing the list of 'LineFileEntryFormat' of content formats
 parseEntry :: Sections -> Endianess -> Encoding -> TargetSize -> [LineFileEntryFormat] -> Get FileLineHeaderEntry
 parseEntry secs end enc tgt forms = FileLineHeaderEntry . Map.fromList <$> forM forms (parseLineEntryToVal secs end enc tgt)
 
@@ -248,6 +255,7 @@ getWithDefault (FileLineHeaderEntry mp) k f d =
             atVal <- Map.lookup k mp
             f atVal)
 
+-- | Converts a v5 file entry to a legacy file by extracting the relevant content types
 createLegacyFileName :: FileLineHeaderEntry -> LegacyFileName 
 createLegacyFileName hd = 
     let defU64 lc d = getWithDefault hd lc (\case {DW_ATVAL_UINT s -> Just s; _ -> Nothing}) d
@@ -255,12 +263,15 @@ createLegacyFileName hd =
         dirIndex = defU64 DW_LNCT_directory_index 0 
         size = defU64 DW_LNCT_size 0 
     in (pth, dirIndex, 0, size)
+
+-- | Given a list of 'LineFileEntryFormat' representing a pair of a content type code and format code, parses 
+-- a 'LegacyFileName'
 parsePaths :: Int -> Sections -> Endianess -> Encoding -> TargetSize -> [LineFileEntryFormat] -> Get [LegacyFileName]
 parsePaths entNum secs end encoding tgt formEnts = 
     let ents = parseEntries entNum secs end encoding tgt formEnts in 
       map createLegacyFileName  <$> ents
 
-
+-- | The legacy datastructure for filename configurations (name, dir_index, last_mod, length)
 type LegacyFileName = (B.ByteString, Word64, Word64, Word64)
 data ParsedLineHeader = ParsedLineHeader {lineBase :: Int8, lineRange :: Word8, opCodeBase :: Word8, minimumInstructionLength :: Word8, defaultIsStmt :: Bool,
     fileNames :: [LegacyFileName]}
