@@ -454,7 +454,7 @@ interpretStrx end enc secs (SectionOffset addrOff) =
     getStringAttr strOff secs
 
 -- | A parsed attribute form. We allow addrx and strx to be delayed (as a function from a 'CUContext' to a fallible monad)
--- in order to evaluate strx/addrx after observing the str offste base and address base
+-- in order to evaluate strx/addrx after observing the str offset base and address base
 data ParsedForm m =
   DelayedAttr (CUContext -> m DW_ATVAL)
   | RealizedAttr DW_ATVAL
