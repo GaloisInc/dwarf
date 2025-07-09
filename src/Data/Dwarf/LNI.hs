@@ -204,9 +204,6 @@ getDebugLineFileNames = go []
             file_length <- getULEB128
             go ((fileName, dir_index, last_mod, file_length):prev)
 
-
-
-
 newtype DW_LNCT = DW_LNCT Word64 
       deriving (Eq,Ord)
 
@@ -219,14 +216,11 @@ pattern DW_LNCT_directory_index = DW_LNCT 0x2
 pattern DW_LNCT_size :: DW_LNCT
 pattern DW_LNCT_size = DW_LNCT 0x4
 
-
 data LineFileEntryFormat = LineFileEntryFormat {contentType :: DW_LNCT, formCode :: DW_FORM}
 
 parseLineEntryToVal ::  Sections -> Endianess -> Encoding -> TargetSize -> LineFileEntryFormat -> Get (DW_LNCT,DW_ATVAL)
 parseLineEntryToVal secs end encoding tgt (LineFileEntryFormat {contentType=ct, formCode=form'}) = 
     (ct,) <$> getRealizedForm secs end encoding tgt form'
-        
-
 
 parseFileEntryForm :: Get LineFileEntryFormat
 parseFileEntryForm = do
@@ -238,9 +232,7 @@ parseFormList :: Int -> Get [LineFileEntryFormat]
 parseFormList ct = 
     replicateM ct parseFileEntryForm
 
-
 data FileLineHeaderEntry = FileLineHeaderEntry (Map.Map DW_LNCT DW_ATVAL)
-
 
 parseEntry :: Sections -> Endianess -> Encoding -> TargetSize -> [LineFileEntryFormat] -> Get FileLineHeaderEntry
 parseEntry secs end enc tgt forms = FileLineHeaderEntry . Map.fromList <$> forM forms (parseLineEntryToVal secs end enc tgt)
@@ -309,9 +301,6 @@ parseLNEV4 endianess enc = do
     file_names'                 <- getDebugLineFileNames
     pure ParsedLineHeader {lineBase=line_base, lineRange=line_range, opCodeBase=opcode_base, minimumInstructionLength=minimum_instruction_length, 
         defaultIsStmt=default_is_stmt, fileNames=file_names'} 
-
-
-data LNEContext = LNEContext {file_names :: [B.ByteString]}
 
 getLNE :: Sections -> Endianess -> TargetSize -> Get ([B.ByteString], [DW_LNE])
 getLNE secs endianess target64 = do
