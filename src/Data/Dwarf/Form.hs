@@ -19,7 +19,6 @@ import Data.Dwarf.Internals
 import qualified Data.ByteString as B
 import Control.Monad (replicateM)
 
-
 newtype DW_FORM = DW_FORM Word64
   deriving (Eq,Ord)
 
