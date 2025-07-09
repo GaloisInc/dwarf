@@ -439,8 +439,6 @@ interpretAddrx end tgt secs (SectionOffset addrOff)  =
         Right (_,_,raddr) -> pure raddr
     pure  $ DW_ATVAL_UINT addr
 
-
--- desrGetOffset end (drEncoding dr)
 interpretStrx :: (MonadFail m) =>  Endianess -> Encoding -> Sections -> SectionOffset-> m DW_ATVAL
 interpretStrx end enc secs (SectionOffset addrOff) =
   do
