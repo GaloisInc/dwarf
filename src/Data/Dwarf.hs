@@ -3,6 +3,7 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-#LANGUAGE GeneralisedNewtypeDeriving #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE LambdaCase #-}
 
@@ -126,20 +127,7 @@ mkSections :: (B.ByteString -> Maybe B.ByteString) -> Sections
 mkSections = SectionContents
 
 newtype StrError a = StrError (Either String a)
-
-instance Functor StrError where
-  fmap f (StrError x)= (StrError . fmap f) x
-
-instance Applicative StrError where
-  pure = StrError . pure
-  (<*>) (StrError f) (StrError v) = StrError (f <*> v)
-
-instance Monad StrError where
-  (>>=) :: StrError a -> (a -> StrError b) -> StrError b
-  (>>=) (StrError v) f =
-    case v of
-        Left s -> StrError $ Left s
-        Right uv -> f uv
+  deriving (Applicative, Functor, Monad)
 
 instance MonadFail StrError where
   fail = StrError . Left
