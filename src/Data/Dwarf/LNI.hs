@@ -223,7 +223,7 @@ data LineFileEntryFormat = LineFileEntryFormat {contentType :: DW_LNCT, formCode
 -- | Parse a single line entry given a specified format
 parseLineEntryToVal ::  Sections -> Endianess -> Encoding -> TargetSize -> LineFileEntryFormat -> Get (DW_LNCT, DW_ATVAL)
 parseLineEntryToVal secs end encoding tgt (LineFileEntryFormat {contentType=ct, formCode=form'}) = 
-    (ct,) <$> getRealizedForm secs end encoding tgt form'
+    (ct,) <$> getEvaluableForm secs end encoding tgt form'
 
 -- | Parses an entry format (pair of content type and form code)
 parseFileEntryForm :: Get LineFileEntryFormat

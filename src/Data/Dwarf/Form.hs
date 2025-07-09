@@ -159,8 +159,10 @@ getStringAttr offset secs =
 unimplForm :: DW_FORM -> Get a
 unimplForm f = fail $ "Unimplemented attribute parser: " ++ show f
 
-getRealizedForm :: Sections -> Endianess -> Encoding -> TargetSize -> DW_FORM -> Get DW_ATVAL
-getRealizedForm  secs end enc tgt form = do  
+-- | Evaluates attributes that are "directly" evaluable, that is they do not require the Compilation Unit Context
+-- These types of operations are evaluable in the line program header context as well.
+getEvaluableForm :: Sections -> Endianess -> Encoding -> TargetSize -> DW_FORM -> Get DW_ATVAL
+getEvaluableForm  secs end enc tgt form = do  
   case form of
     DW_FORM_addr ->  DW_ATVAL_UINT . fromIntegral <$> getTargetAddress end tgt
     DW_FORM_block2 ->  DW_ATVAL_BLOB <$> getByteStringLen (derGetW16 end)

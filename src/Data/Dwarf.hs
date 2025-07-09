@@ -476,7 +476,7 @@ getForm cuContext form = do
     DW_FORM_ref8 -> RealizedAttr . DW_ATVAL_REF . inCU cu <$> derGetW64 end
     DW_FORM_ref_udata ->  RealizedAttr . DW_ATVAL_REF . inCU cu <$> getULEB128
     DW_FORM_indirect -> getForm cuContext . DW_FORM =<< getULEB128
-    _ -> RealizedAttr <$> getRealizedForm dc end enc tgt form
+    _ -> RealizedAttr <$> getEvaluableForm dc end enc tgt form
   where
       -- shared structure between addrx and strx operations where an offset is used to index an array and that value is an offset into a further table
       -- takes a parser for the offset, a function that consumes the offset and produces the final attribute values and a way to retrieve the base offset
