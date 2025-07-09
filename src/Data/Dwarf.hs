@@ -126,6 +126,8 @@ inCU (CUOffset base) x = DieID (base + fromIntegral x)
 mkSections :: (B.ByteString -> Maybe B.ByteString) -> Sections
 mkSections = SectionContents
 
+-- | 'StrError' wraps an 'Either String a' to enable using an 'Either String a' in a 'MonadFail' 
+-- context. An either can be retrieved from that context via 'eitherOfStrError'
 newtype StrError a = StrError (Either String a)
   deriving (Applicative, Functor, Monad)
 
