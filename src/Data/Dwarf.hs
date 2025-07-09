@@ -429,15 +429,6 @@ getDieAndSiblings cuContext = do
     br <- Get.bytesRead
     getDIEAndDescendants cuContext (DieID (off + fromIntegral br))
 
-
-getStringAttr :: (MonadFail m) => Word64 -> Sections -> m DW_ATVAL
-getStringAttr offset secs =
-  do
-      strsec <- dsStrSection secs
-      let str = B.drop (fromIntegral offset) strsec
-      pure $! DW_ATVAL_STRING (B.takeWhile (/= 0) str)
-
-
 {-
 
 parseFromOffsetTable :: Get B.ByteString -> Sections ->  (Word64 -> Sections -> DW_ATVAL) -> Word64 -> Word64 -> Maybe DW_ATVAL 

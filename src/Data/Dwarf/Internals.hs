@@ -18,6 +18,7 @@ module Data.Dwarf.Internals
   dsInfoSection,
   dsRangesSection,
   dsLineSection,
+  dsLineStrSection,
   dsStrOffsets,
   dsAddr
   ) where
@@ -52,6 +53,9 @@ dsInfoSection = requiredSection ".debug_info"
 
 dsLineSection :: (MonadFail m) => Sections -> m B.ByteString
 dsLineSection = requiredSection ".debug_line"
+
+dsLineStrSection :: (MonadFail m) => Sections -> m B.ByteString
+dsLineStrSection = requiredSection ".debug_line_str"
 
 dsRangesSection :: (MonadFail m) => Sections -> m B.ByteString
 dsRangesSection = requiredSection ".debug_ranges"

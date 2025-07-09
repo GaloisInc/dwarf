@@ -17,6 +17,7 @@ import Data.Dwarf.AT
 import Data.Dwarf.Reader
 import Data.Dwarf.Internals
 import qualified Data.ByteString as B
+import Control.Monad (replicateM)
 
 
 newtype DW_FORM = DW_FORM Word64
@@ -145,13 +146,16 @@ instance Show DW_FORM where
       Just r -> showString r
       Nothing -> showParen (p > 10) $ showString "DW_FORM 0x" . showHex x
 
+getStringAttrWithSection :: (MonadFail m) => Word64 -> Sections -> (Sections -> m B.ByteString) -> m DW_ATVAL
+getStringAttrWithSection offset secs section =
+  do
+      strsec <- section secs
+      let str = B.drop (fromIntegral offset) strsec
+      pure $! DW_ATVAL_STRING (B.takeWhile (/= 0) str)
 
 getStringAttr :: (MonadFail m) => Word64 -> Sections -> m DW_ATVAL
 getStringAttr offset secs =
-  do
-      strsec <- dsStrSection secs
-      let str = B.drop (fromIntegral offset) strsec
-      pure $! DW_ATVAL_STRING (B.takeWhile (/= 0) str)
+  getStringAttrWithSection offset secs dsStrSection
 
 unimplForm :: DW_FORM -> Get a
 unimplForm f = fail $ "Unimplemented attribute parser: " ++ show f
@@ -182,8 +186,12 @@ getRealizedForm  secs end enc tgt form = do
     DW_FORM_ref_sig8 ->  DW_ATVAL_UINT . fromIntegral <$> derGetW64 end
     DW_FORM_ref_sup4 -> unimplForm form
     DW_FORM_strp_sup -> unimplForm form
-    DW_FORM_data16 -> unimplForm form
-    DW_FORM_line_strp -> unimplForm form
+    DW_FORM_data16 -> do
+      lst <- replicateM 16 getWord8
+      pure $ DW_ATVAL_BLOB $ B.pack lst
+    DW_FORM_line_strp -> do
+      offset <- desrGetOffset end enc
+      getStringAttrWithSection offset secs dsLineStrSection
     DW_FORM_implicit_const -> unimplForm form
     DW_FORM_loclistx -> unimplForm form
     DW_FORM_rnglistx -> undefined
