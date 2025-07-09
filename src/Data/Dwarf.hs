@@ -520,7 +520,6 @@ computeAttrs abbrevs =
             \(attr, form) -> do
               cuContext <- get
               (at, atval) <- (attr,) <$> lift (getForm cuContext form)
-              let
               _ <- updateFld cuAddrBase (\x y -> x {cuAddrBase = y}) DW_AT_addr_base at atval
               _ <- updateFld cuStringOffsetBase (\x y -> x {cuStringOffsetBase = y}) DW_AT_str_offsets_base at atval
               pure (at, atval)
