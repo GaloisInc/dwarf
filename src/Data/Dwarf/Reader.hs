@@ -40,7 +40,6 @@ import           qualified Data.Bits as Bits
 
 import           Data.Word (Word16, Word32, Word64)
 
--- TODO: Use a type with 24 bits
 word24le :: B.ByteString -> Word32
 word24le s = fromIntegral (s `B.unsafeIndex` 0) Bits..|. (fromIntegral (s `B.unsafeIndex` 1) `Bits.unsafeShiftL` 8) Bits..|. (fromIntegral (s `B.unsafeIndex` 2) `Bits.unsafeShiftL` 16)
 
@@ -52,7 +51,6 @@ getWord24be = GI.readN 3 word24be
 
 getWord24le :: Get Word32
 getWord24le = GI.readN 3 word24le
-
 
 -- | Ordering bytes are encoded in buffers.
 data Endianess = LittleEndian | BigEndian
