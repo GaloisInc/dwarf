@@ -12,6 +12,12 @@ module Data.Dwarf.Form where
 import qualified Data.Map.Strict as Map
 import           Data.Word (Word64)
 import           Numeric (showHex)
+import Data.Binary.Get
+import Data.Dwarf.AT
+import Data.Dwarf.Reader
+import Data.Dwarf.Internals
+import qualified Data.ByteString as B
+
 
 newtype DW_FORM = DW_FORM Word64
   deriving (Eq,Ord)
@@ -138,3 +144,48 @@ instance Show DW_FORM where
     case Map.lookup (DW_FORM x) dwFormNameMap of
       Just r -> showString r
       Nothing -> showParen (p > 10) $ showString "DW_FORM 0x" . showHex x
+
+
+getStringAttr :: (MonadFail m) => Word64 -> Sections -> m DW_ATVAL
+getStringAttr offset secs =
+  do
+      strsec <- dsStrSection secs
+      let str = B.drop (fromIntegral offset) strsec
+      pure $! DW_ATVAL_STRING (B.takeWhile (/= 0) str)
+
+unimplForm :: DW_FORM -> Get a
+unimplForm f = fail $ "Unimplemented attribute parser: " ++ show f
+
+getRealizedForm :: Sections -> Endianess -> Encoding -> TargetSize -> DW_FORM -> Get DW_ATVAL
+getRealizedForm  secs end enc tgt form = do  
+  case form of
+    DW_FORM_addr ->  DW_ATVAL_UINT . fromIntegral <$> getTargetAddress end tgt
+    DW_FORM_block2 ->  DW_ATVAL_BLOB <$> getByteStringLen (derGetW16 end)
+    DW_FORM_block4 ->  DW_ATVAL_BLOB <$> getByteStringLen (derGetW32 end)
+    DW_FORM_data2 ->  DW_ATVAL_UINT . fromIntegral <$> derGetW16 end
+    DW_FORM_data4 ->  DW_ATVAL_UINT . fromIntegral <$> derGetW32 end
+    DW_FORM_data8 ->  DW_ATVAL_UINT . fromIntegral <$> derGetW64 end
+    DW_FORM_string ->  DW_ATVAL_STRING <$> getByteStringNul
+    DW_FORM_block ->  DW_ATVAL_BLOB <$> getByteStringLen getULEB128
+    DW_FORM_block1 -> DW_ATVAL_BLOB <$> getByteStringLen getWord8
+    DW_FORM_data1 ->  DW_ATVAL_UINT . fromIntegral <$> getWord8
+    DW_FORM_flag ->  DW_ATVAL_BOOL . (/= 0) <$> getWord8
+    DW_FORM_sdata ->  DW_ATVAL_INT <$> getSLEB128
+    DW_FORM_strp -> do
+      offset <- desrGetOffset end enc
+      getStringAttr offset secs
+    DW_FORM_udata ->  DW_ATVAL_UINT <$> getULEB128
+    -- new in Dwarf version 4
+    DW_FORM_sec_offset ->  DW_ATVAL_UINT <$> desrGetOffset end enc
+    DW_FORM_exprloc ->  DW_ATVAL_BLOB <$> getByteStringLen getULEB128
+    DW_FORM_flag_present -> pure ( DW_ATVAL_BOOL True)
+    DW_FORM_ref_sig8 ->  DW_ATVAL_UINT . fromIntegral <$> derGetW64 end
+    DW_FORM_ref_sup4 -> unimplForm form
+    DW_FORM_strp_sup -> unimplForm form
+    DW_FORM_data16 -> unimplForm form
+    DW_FORM_line_strp -> unimplForm form
+    DW_FORM_implicit_const -> unimplForm form
+    DW_FORM_loclistx -> unimplForm form
+    DW_FORM_rnglistx -> undefined
+    DW_FORM_ref_sup8 -> undefined
+    _ -> unimplForm form

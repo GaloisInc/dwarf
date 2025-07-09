@@ -124,36 +124,8 @@ dieID (DieID x) = x
 inCU :: Integral a => CUOffset -> a -> DieID
 inCU (CUOffset base) x = DieID (base + fromIntegral x)
 
--- | Sections to retrieve dwarf information.
-newtype Sections = SectionContents (B.ByteString -> Maybe B.ByteString)
-
 mkSections :: (B.ByteString -> Maybe B.ByteString) -> Sections
 mkSections = SectionContents
-
-requiredSection :: (MonadFail m) => B.ByteString -> Sections -> m B.ByteString
-requiredSection nm (SectionContents sections) =
-  maybe (fail $ "Required section: " ++  show nm) pure (sections nm)
-
-dsStrSection :: (MonadFail m) => Sections -> m B.ByteString
-dsStrSection = requiredSection ".debug_str"
-
-dsAbbrevSection :: (MonadFail m) => Sections -> m B.ByteString
-dsAbbrevSection = requiredSection ".debug_abbrev"
-
-dsInfoSection :: (MonadFail m) => Sections -> m B.ByteString
-dsInfoSection = requiredSection ".debug_info"
-
-dsLineSection :: (MonadFail m) => Sections -> m B.ByteString
-dsLineSection = requiredSection ".debug_line"
-
-dsRangesSection :: (MonadFail m) => Sections -> m B.ByteString
-dsRangesSection = requiredSection ".debug_ranges"
-
-dsStrOffsets :: (MonadFail m) => Sections -> m B.ByteString
-dsStrOffsets = requiredSection ".debug_str_offsets"
-
-dsAddr :: (MonadFail m) => Sections -> m B.ByteString
-dsAddr = requiredSection ".debug_addr"
 
 newtype StrError a = StrError (Either String a)
 
@@ -456,9 +428,6 @@ getDieAndSiblings cuContext = do
     let DIEOffset off = cuDieOffset cuContext
     br <- Get.bytesRead
     getDIEAndDescendants cuContext (DieID (off + fromIntegral br))
-
-unimplForm :: DW_FORM -> Get a
-unimplForm f = fail $ "Unimplemented attribute parser: " ++ show f
 
 
 getStringAttr :: (MonadFail m) => Word64 -> Sections -> m DW_ATVAL

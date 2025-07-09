@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Data.Dwarf.Internals
   ( getSLEB128
   , getULEB128
@@ -9,6 +11,15 @@ module Data.Dwarf.Internals
   , whileJust
   , strictGet
   , getWhileNotEmpty
+  , Sections(SectionContents)
+  , requiredSection
+  , dsStrSection,
+  dsAbbrevSection,
+  dsInfoSection,
+  dsRangesSection,
+  dsLineSection,
+  dsStrOffsets,
+  dsAddr
   ) where
 
 import           Data.Binary.Get (getByteString, getWord8, Get, runGet)
@@ -18,6 +29,39 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
 import           Data.Int (Int64)
 import           Data.Word (Word64)
+
+
+-- | Sections to retrieve dwarf information.
+newtype Sections = SectionContents (B.ByteString -> Maybe B.ByteString)
+
+
+requiredSection :: (MonadFail m) => B.ByteString -> Sections -> m B.ByteString
+requiredSection nm (SectionContents sections) =
+  maybe (fail $ "Required section: " ++  show nm) pure (sections nm)
+
+
+
+dsStrSection :: (MonadFail m) => Sections -> m B.ByteString
+dsStrSection = requiredSection ".debug_str"
+
+dsAbbrevSection :: (MonadFail m) => Sections -> m B.ByteString
+dsAbbrevSection = requiredSection ".debug_abbrev"
+
+dsInfoSection :: (MonadFail m) => Sections -> m B.ByteString
+dsInfoSection = requiredSection ".debug_info"
+
+dsLineSection :: (MonadFail m) => Sections -> m B.ByteString
+dsLineSection = requiredSection ".debug_line"
+
+dsRangesSection :: (MonadFail m) => Sections -> m B.ByteString
+dsRangesSection = requiredSection ".debug_ranges"
+
+dsStrOffsets :: (MonadFail m) => Sections -> m B.ByteString
+dsStrOffsets = requiredSection ".debug_str_offsets"
+
+dsAddr :: (MonadFail m) => Sections -> m B.ByteString
+dsAddr = requiredSection ".debug_addr"
+
 
 whileJust :: (Applicative m, Monad m) => m (Maybe a) -> m [a]
 whileJust act =
