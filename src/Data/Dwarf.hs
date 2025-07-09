@@ -418,7 +418,8 @@ getDieAndSiblings cuContext = do
 newtype SectionOffset = SectionOffset Word64
 
 
--- Retrieves an address from the "debug_addr" array at the offset specified by the given 'SectionOffset'
+-- Retrieves an address from the "debug_addr" array at the offset specified by the given 'SectionOffset'.
+-- This type of address form was added in DWARFv5.
 interpretAddrx :: (MonadFail m) => Endianess -> TargetSize -> Sections -> SectionOffset -> m DW_ATVAL
 interpretAddrx end tgt secs (SectionOffset addrOff)  =
   do
@@ -430,7 +431,7 @@ interpretAddrx end tgt secs (SectionOffset addrOff)  =
     pure  $ DW_ATVAL_UINT addr
 
 -- | Retrieves a string from the string table "debug_str" by reading an offset from the "debug_str_offsets" table at the specified
--- 'SectionOffset'
+-- 'SectionOffset'. This type of string form was added in DWARFv5.
 interpretStrx :: (MonadFail m) =>  Endianess -> Encoding -> Sections -> SectionOffset-> m DW_ATVAL
 interpretStrx end enc secs (SectionOffset addrOff) =
   do
