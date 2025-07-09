@@ -14,9 +14,9 @@ import           Data.Dwarf.Reader
 import           Data.Int (Int8, Int64)
 import           Data.Word (Word8, Word64)
 import           qualified Data.Map as Map
-import Data.Dwarf.Form
-import Data.Dwarf.AT
-import Data.Maybe (fromMaybe)
+import           Data.Dwarf.Form
+import           Data.Dwarf.AT
+import           Data.Maybe (fromMaybe)
 
 -- Section 7.21 - Line Number Information
 data DW_LNI
