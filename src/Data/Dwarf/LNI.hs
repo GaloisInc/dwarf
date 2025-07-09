@@ -16,7 +16,7 @@ import           Data.Word (Word8, Word64)
 import           qualified Data.Map as Map
 import Data.Dwarf.Form
 import Data.Dwarf.AT
-import Data.Maybe (mapMaybe, fromMaybe)
+import Data.Maybe (fromMaybe)
 
 -- Section 7.21 - Line Number Information
 data DW_LNI
@@ -210,16 +210,21 @@ getDebugLineFileNames = go []
 newtype DW_LNCT = DW_LNCT Word64 
       deriving (Eq,Ord)
 
+pattern DW_LNCT_path :: DW_LNCT
 pattern DW_LNCT_path = DW_LNCT 0x1
+
+pattern DW_LNCT_directory_index :: DW_LNCT
 pattern DW_LNCT_directory_index = DW_LNCT 0x2
+
+pattern DW_LNCT_size :: DW_LNCT
 pattern DW_LNCT_size = DW_LNCT 0x4
 
 
 data LineFileEntryFormat = LineFileEntryFormat {contentType :: DW_LNCT, form:: DW_FORM}
 
 parseLineEntryToVal ::  Sections -> Endianess -> Encoding -> TargetSize -> LineFileEntryFormat -> Get (DW_LNCT,DW_ATVAL)
-parseLineEntryToVal secs end encoding tgt (LineFileEntryFormat {contentType=ct, form=form}) = 
-    (ct,) <$> getRealizedForm secs end encoding tgt form
+parseLineEntryToVal secs end encoding tgt (LineFileEntryFormat {contentType=ct, form=form'}) = 
+    (ct,) <$> getRealizedForm secs end encoding tgt form'
         
 
 
@@ -291,8 +296,8 @@ parseLNEV5 secs endianess enc target64  = do
     pure ParsedLineHeader {lineBase=line_base, lineRange=line_range, opCodeBase=opcode_base, minimumInstructionLength=minimum_instruction_length, 
         defaultIsStmt=default_is_stmt, fileNames=fileNames'}
 
-parseLNEV4 :: Endianess -> TargetSize -> Encoding -> Get ParsedLineHeader 
-parseLNEV4 endianess _ enc = do 
+parseLNEV4 :: Endianess -> Encoding -> Get ParsedLineHeader 
+parseLNEV4 endianess enc = do 
     _header_length             <- desrGetOffset endianess enc
     minimum_instruction_length <- getWord8
     default_is_stmt            <- (/= 0) <$> getWord8
@@ -301,9 +306,9 @@ parseLNEV4 endianess _ enc = do
     opcode_base                <- getWord8
     _standard_opcode_lengths   <- replicateM (fromIntegral opcode_base - 1) getWord8
     _include_directories       <- whileM (\b -> not (B.null b)) getByteStringNul
-    file_names                 <- getDebugLineFileNames
+    file_names'                 <- getDebugLineFileNames
     pure ParsedLineHeader {lineBase=line_base, lineRange=line_range, opCodeBase=opcode_base, minimumInstructionLength=minimum_instruction_length, 
-        defaultIsStmt=default_is_stmt, fileNames=file_names} 
+        defaultIsStmt=default_is_stmt, fileNames=file_names'} 
 
 
 data LNEContext = LNEContext {file_names :: [B.ByteString]}
@@ -314,7 +319,7 @@ getLNE secs endianess target64 = do
     pos <- bytesRead
     let endPos = fromIntegral pos + size
     version                   <- derGetW16 endianess
-    prsed <- if version >= 5 then parseLNEV5 secs endianess enc target64 else parseLNEV4 endianess target64 enc
+    prsed <- if version >= 5 then parseLNEV5 secs endianess enc target64 else parseLNEV4 endianess enc
     curPos <- fromIntegral <$> bytesRead
     -- Check if we have reached the end of the section.
     let fnames = fileNames prsed
