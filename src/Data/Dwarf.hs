@@ -429,6 +429,8 @@ getDieAndSiblings cuContext = do
 
 newtype SectionOffset = SectionOffset Word64
 
+
+-- Retrieves an address from the "debug_addr" array at the offset specified by the given 'SectionOffset'
 interpretAddrx :: (MonadFail m) => Endianess -> TargetSize -> Sections -> SectionOffset -> m DW_ATVAL
 interpretAddrx end tgt secs (SectionOffset addrOff)  =
   do
@@ -439,6 +441,8 @@ interpretAddrx end tgt secs (SectionOffset addrOff)  =
         Right (_,_,raddr) -> pure raddr
     pure  $ DW_ATVAL_UINT addr
 
+-- | Retrieves a string from the string table "debug_str" by reading an offset from the "debug_str_offsets" table at the specified
+-- 'SectionOffset'
 interpretStrx :: (MonadFail m) =>  Endianess -> Encoding -> Sections -> SectionOffset-> m DW_ATVAL
 interpretStrx end enc secs (SectionOffset addrOff) =
   do
@@ -484,6 +488,9 @@ getForm cuContext form = do
     DW_FORM_indirect -> getForm cuContext . DW_FORM =<< getULEB128
     _ -> RealizedAttr <$> getRealizedForm dc end enc tgt form
   where
+      -- shared structure between addrx and strx operations where an offset is used to index an array and that value is an offset into a further table
+      -- takes a parser for the offset, a function that consumes the offset and produces the final attribute values and a way to retrieve the base offset
+      -- for the target table
       parseIntegralOff :: (MonadFail m, Show a, Integral a) => Sections -> Get a -> (Sections -> SectionOffset-> m DW_ATVAL) -> (CUContext -> Maybe Word64) -> Word64 -> Get (ParsedForm m)
       parseIntegralOff sections getter f getBase addrSize =
         do
