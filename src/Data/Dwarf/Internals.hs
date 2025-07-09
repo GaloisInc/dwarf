@@ -35,12 +35,9 @@ import           Data.Word (Word64)
 -- | Sections to retrieve dwarf information.
 newtype Sections = SectionContents (B.ByteString -> Maybe B.ByteString)
 
-
 requiredSection :: (MonadFail m) => B.ByteString -> Sections -> m B.ByteString
 requiredSection nm (SectionContents sections) =
   maybe (fail $ "Required section: " ++  show nm) pure (sections nm)
-
-
 
 dsStrSection :: (MonadFail m) => Sections -> m B.ByteString
 dsStrSection = requiredSection ".debug_str"
