@@ -40,21 +40,24 @@ import           qualified Data.Bits as Bits
 
 import           Data.Word (Word16, Word32, Word64)
 
-word24le :: B.ByteString -> Word32
-word24le s = fromIntegral (s `B.unsafeIndex` 0) Bits..|. 
-  (fromIntegral (s `B.unsafeIndex` 1) `Bits.unsafeShiftL` 8) Bits..|. 
-  (fromIntegral (s `B.unsafeIndex` 2) `Bits.unsafeShiftL` 16)
-
-word24be :: B.ByteString -> Word32
-word24be s = fromIntegral (s `B.unsafeIndex` 2) Bits..|.
-  (fromIntegral (s `B.unsafeIndex` 1) `Bits.unsafeShiftL` 1) Bits..|. 
-  (fromIntegral (s `B.unsafeIndex` 0) `Bits.unsafeShiftL` 16)
-
 getWord24be :: Get Word32
 getWord24be = GI.readN 3 word24be
+  where 
+    -- safe in the context of readN 3 since the indices are valid
+    word24be :: B.ByteString -> Word32
+    word24be s = fromIntegral (s `B.unsafeIndex` 2) Bits..|.
+      (fromIntegral (s `B.unsafeIndex` 1) `Bits.unsafeShiftL` 1) Bits..|. 
+      (fromIntegral (s `B.unsafeIndex` 0) `Bits.unsafeShiftL` 16)
 
 getWord24le :: Get Word32
 getWord24le = GI.readN 3 word24le
+  where 
+    -- safe in the context of readN 3 since the indices are valid
+    word24le :: B.ByteString -> Word32
+    word24le s = fromIntegral (s `B.unsafeIndex` 0) Bits..|. 
+      (fromIntegral (s `B.unsafeIndex` 1) `Bits.unsafeShiftL` 8) Bits..|. 
+      (fromIntegral (s `B.unsafeIndex` 2) `Bits.unsafeShiftL` 16)
+
 
 -- | Ordering bytes are encoded in buffers.
 data Endianess = LittleEndian | BigEndian

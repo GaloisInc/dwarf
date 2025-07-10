@@ -206,7 +206,7 @@ getDebugLineFileNames = go []
 
 -- | A line program header content type
 newtype DW_LNCT = DW_LNCT Word64 
-      deriving (Eq,Ord)
+    deriving (Eq,Ord)
 
 pattern DW_LNCT_path :: DW_LNCT
 pattern DW_LNCT_path = DW_LNCT 0x1
@@ -251,9 +251,9 @@ parseEntries entNum secs end encoding tgt ents = replicateM entNum (parseEntry s
 
 getWithDefault :: FileLineHeaderEntry -> DW_LNCT -> (DW_ATVAL -> Maybe a) -> a -> a 
 getWithDefault (FileLineHeaderEntry mp) k f d =
-        fromMaybe d (do 
-            atVal <- Map.lookup k mp
-            f atVal)
+    fromMaybe d (do 
+        atVal <- Map.lookup k mp
+        f atVal)
 
 -- | Converts a v5 file entry to a legacy file by extracting the relevant content types
 createLegacyFileName :: FileLineHeaderEntry -> LegacyFileName 

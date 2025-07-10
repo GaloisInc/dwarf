@@ -502,7 +502,7 @@ getForm cuContext form = do
       parseIntegralOff sections getter f getBase addrSize =
         do
           index <- getter
-          let off = (fromIntegral index) * addrSize
+          let off = fromIntegral index * addrSize
           pure $ DelayedAttr (\ctx ->
               let base = fromMaybe 0 (getBase ctx)
                   secOff = SectionOffset (fromIntegral off + base) in
