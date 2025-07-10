@@ -8,15 +8,15 @@ module Data.Dwarf.LNI where
 import           Control.Monad (replicateM, forM)
 import           Data.Binary (Binary(..), Get)
 import           Data.Binary.Get (getWord8, bytesRead)
-import qualified Data.ByteString as B
+import           Data.Dwarf.AT
+import           Data.Dwarf.Form
 import           Data.Dwarf.Internals
 import           Data.Dwarf.Reader
 import           Data.Int (Int8, Int64)
+import           Data.Maybe (fromMaybe)
 import           Data.Word (Word8, Word64)
 import           qualified Data.Map as Map
-import           Data.Dwarf.Form
-import           Data.Dwarf.AT
-import           Data.Maybe (fromMaybe)
+import qualified Data.ByteString as B
 
 -- Section 7.21 - Line Number Information
 data DW_LNI
