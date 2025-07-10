@@ -151,7 +151,11 @@ data CUContext = CUContext
     cuNextOffset :: !CUOffset,
     cuNextAbbrevCache :: !(M.Map Word64 (M.Map AbbrevId DW_ABBREV)),
     cuUnitType :: !(Maybe Word8),
+    -- | The base from which all offsets into the debug addr section using addrx are computed for this CU
+    -- Only present in v5
     cuAddrBase :: !(Maybe Word64),
+    -- | The base from which all offsets into the string offsets section are computed for this CU
+    -- using the strx form. Only present in v5
     cuStringOffsetBase :: !(Maybe Word64)
   }
 
