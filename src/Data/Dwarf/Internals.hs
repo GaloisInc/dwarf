@@ -14,12 +14,12 @@ module Data.Dwarf.Internals
   , Sections(SectionContents)
   , requiredSection
   , dsStrSection,
-  dsAbbrevSection,
-  dsInfoSection,
-  dsRangesSection,
-  dsLineSection,
-  dsLineStrSection,
-  dsStrOffsets,
+  , dsAbbrevSection
+  , dsInfoSection
+  , dsRangesSection
+  , dsLineSection
+  , dsLineStrSection
+  , dsStrOffsets
   dsAddr
   ) where
 
