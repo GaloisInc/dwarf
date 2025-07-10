@@ -1,9 +1,14 @@
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE TupleSections #-}
 
 -- | Parses the DWARF 2-5 specifications at http://www.dwarfstd.org given
--- the debug sections in ByteString form.
+-- the debug sections in ByteString form. Version 5 DWARF parsing is incomplete, see: [DWARF Version Support]
+-- for more info.
 module Data.Dwarf
   ( -- * Encoding and target information
     Encoding (..),
@@ -12,7 +17,6 @@ module Data.Dwarf
 
     -- * Parsing
     Sections (..),
-    mkSections,
     CUContext,
     cuReader,
     cuSections,
@@ -67,6 +71,12 @@ module Data.Dwarf
     DW_OP (..),
     parseDW_OP,
     parseDW_OPs,
+    mkSections,
+    dsStrSection,
+    dsAbbrevSection,
+    dsInfoSection,
+    dsLineSection,
+    dsRangesSection,
     module Data.Dwarf.AT,
     module Data.Dwarf.ATE,
     module Data.Dwarf.TAG,
@@ -77,12 +87,12 @@ module Data.Dwarf
   )
 where
 
-import Control.Monad (forM)
+import Control.Applicative ((<|>))
+import Control.Monad (forM, when)
+import Control.Monad.Trans.Class (lift)
+import Control.Monad.Trans.State (StateT (runStateT), get, put, evalStateT)
 import Data.Binary (Get)
 import Data.Binary.Get (getWord8)
-import qualified Data.Binary.Get as Get
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Lazy as L
 import Data.Dwarf.AT
 import Data.Dwarf.ATE
 import Data.Dwarf.CFA
@@ -94,8 +104,12 @@ import Data.Dwarf.OP
 import Data.Dwarf.Reader
 import Data.Dwarf.TAG
 import Data.Dwarf.Types
+import Data.Maybe (fromMaybe)
+import Data.Word (Word64, Word8)
+import qualified Data.Binary.Get as Get
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as L
 import qualified Data.Map.Strict as M
-import Data.Word (Word64)
 
 -- | The offset of a compile unit in a file from
 -- the start of the file.
@@ -110,48 +124,20 @@ dieID (DieID x) = x
 inCU :: Integral a => CUOffset -> a -> DieID
 inCU (CUOffset base) x = DieID (base + fromIntegral x)
 
--- | Sections to retrieve dwarf information.
-data Sections = Sections
-  { -- | @.debug_info@ contents
-    dsInfoSection :: B.ByteString,
-    -- | @.debug_abbrev@ contents
-    dsAbbrevSection :: B.ByteString,
-    -- | @.debug_aranges@ contents
-    dsArangesSection :: !B.ByteString,
-    -- | @.debug_line@ contents
-    dsLineSection :: !B.ByteString,
-    -- | @.debug_loc@ contents
-    dsLocSection :: !B.ByteString,
-    -- | @.debug_ranges@ contents
-    dsRangesSection :: !B.ByteString,
-    -- | @.debug_str@ contents
-    dsStrSection :: B.ByteString
-  }
+-- | Makes a section wrapper given a function that looks up a section given a name
+mkSections :: (B.ByteString -> Maybe B.ByteString) -> Sections
+mkSections = SectionContents
 
--- | Create dwarf buffers from function that looks up section names.
-mkSections ::
-  Applicative m =>
-  -- | Function that looks up contents given section name.
-  (B.ByteString -> m B.ByteString) ->
-  m Sections
-mkSections f =
-  let mk info aranges abbrev lne loc ranges str =
-        Sections
-          { dsInfoSection = info,
-            dsArangesSection = aranges,
-            dsAbbrevSection = abbrev,
-            dsLineSection = lne,
-            dsLocSection = loc,
-            dsRangesSection = ranges,
-            dsStrSection = str
-          }
-   in mk <$> f ".debug_info"
-        <*> f ".debug_aranges"
-        <*> f ".debug_abbrev"
-        <*> f ".debug_line"
-        <*> f ".debug_loc"
-        <*> f ".debug_ranges"
-        <*> f ".debug_str"
+-- | 'StrError' wraps an 'Either String a' to enable using an 'Either String a' in a 'MonadFail' 
+-- context. An either can be retrieved from that context via 'eitherOfStrError'
+newtype StrError a = StrError (Either String a)
+  deriving (Applicative, Functor, Monad)
+
+instance MonadFail StrError where
+  fail = StrError . Left
+
+eitherOfStrError :: StrError a -> Either String a
+eitherOfStrError (StrError x) = x
 
 newtype DIEOffset = DIEOffset Word64
 -- ^ Offset in .debug_info of DIE relative from start of bufer.
@@ -165,7 +151,14 @@ data CUContext = CUContext
     cuSections :: !Sections,
     cuDieOffset :: !DIEOffset,
     cuNextOffset :: !CUOffset,
-    cuNextAbbrevCache :: !(M.Map Word64 (M.Map AbbrevId DW_ABBREV))
+    cuNextAbbrevCache :: !(M.Map Word64 (M.Map AbbrevId DW_ABBREV)),
+    cuUnitType :: !(Maybe Word8),
+    -- | The base from which all offsets into the debug addr section using @addrx@ are computed for this CU.
+    -- Only present in v5
+    cuAddrBase :: !(Maybe Word64),
+    -- | The base from which all offsets into the string offsets section are computed for this CU
+    -- using the @strx@ form. Only present in v5
+    cuStringOffsetBase :: !(Maybe Word64)
   }
 
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -430,10 +423,41 @@ getDieAndSiblings cuContext = do
     br <- Get.bytesRead
     getDIEAndDescendants cuContext (DieID (off + fromIntegral br))
 
-unimplForm :: DW_FORM -> Get a
-unimplForm f = fail $ "Unimplemented attribute parser: " ++ show f
+-- | An offset into a section. Used by @strx@, @addrx@, and @line_strx@ as an offset into the debug str offset section, 
+-- the address section, or the line str section.
+newtype SectionOffset = SectionOffset Word64
 
-getForm :: CUContext -> DW_FORM -> Get DW_ATVAL
+-- Retrieves an address from the @debug_addr@ array at the offset specified by the given 'SectionOffset'.
+-- This type of address form was added in DWARFv5.
+interpretAddrx :: (MonadFail m) => Endianess -> TargetSize -> Sections -> SectionOffset -> m DW_ATVAL
+interpretAddrx end tgt secs (SectionOffset addrOff)  =
+  do
+    addrSec <- dsAddr secs
+    addr <-
+       case Get.runGetOrFail (getTargetAddress end tgt) (L.fromChunks [B.drop (fromIntegral addrOff) addrSec]) of
+        Left (_,_, err) -> fail ("interpretAddrx: " ++ err)
+        Right (_,_,raddr) -> pure raddr
+    pure  $ DW_ATVAL_UINT addr
+
+-- | Retrieves a string from the string table "debug_str" by reading an offset from the "debug_str_offsets" table at the specified
+-- 'SectionOffset'. This type of string form was added in DWARFv5.
+interpretStrx :: (MonadFail m) =>  Endianess -> Encoding -> Sections -> SectionOffset-> m DW_ATVAL
+interpretStrx end enc secs (SectionOffset addrOff) =
+  do
+    strOffStr <- dsStrOffsets secs
+    strOff <-
+       case Get.runGetOrFail (desrGetOffset end enc) (L.fromChunks [B.drop (fromIntegral addrOff) strOffStr]) of
+        Left (_,_, err) -> fail ("interpretStrx: " ++ err)
+        Right (_,_,raddr) -> pure raddr
+    getStringAttr strOff secs
+
+-- | A parsed attribute form. We allow addrx and strx to be delayed (as a function from a 'CUContext' to a fallible monad)
+-- in order to evaluate strx/addrx after observing the str offset base and address base
+data ParsedForm m =
+  DelayedAttr (CUContext -> m DW_ATVAL)
+  | RealizedAttr DW_ATVAL
+
+getForm :: MonadFail m => CUContext -> DW_FORM -> Get (ParsedForm m)
 getForm cuContext form = do
   let dr = cuReader cuContext
   let cu = cuOffset cuContext
@@ -441,55 +465,79 @@ getForm cuContext form = do
   let end = drEndianess dr
       enc = drEncoding dr
       tgt = drTarget64 dr
+  let ptrSize = targetPtrByteSize tgt
+  let encByteSize = encodingByteSize enc
+  let parseStrxOfBytesz getter = parseIntegralOff dc getter (interpretStrx end enc) cuStringOffsetBase encByteSize
+  let parseAddrxOfBytesz getter = parseIntegralOff dc getter (interpretAddrx end tgt) cuAddrBase ptrSize
   case form of
-    DW_FORM_addr -> DW_ATVAL_UINT . fromIntegral <$> getTargetAddress end tgt
-    DW_FORM_block2 -> DW_ATVAL_BLOB <$> getByteStringLen (derGetW16 end)
-    DW_FORM_block4 -> DW_ATVAL_BLOB <$> getByteStringLen (derGetW32 end)
-    DW_FORM_data2 -> DW_ATVAL_UINT . fromIntegral <$> derGetW16 end
-    DW_FORM_data4 -> DW_ATVAL_UINT . fromIntegral <$> derGetW32 end
-    DW_FORM_data8 -> DW_ATVAL_UINT . fromIntegral <$> derGetW64 end
-    DW_FORM_string -> DW_ATVAL_STRING <$> getByteStringNul
-    DW_FORM_block -> DW_ATVAL_BLOB <$> getByteStringLen getULEB128
-    DW_FORM_block1 -> DW_ATVAL_BLOB <$> getByteStringLen getWord8
-    DW_FORM_data1 -> DW_ATVAL_UINT . fromIntegral <$> getWord8
-    DW_FORM_flag -> DW_ATVAL_BOOL . (/= 0) <$> getWord8
-    DW_FORM_sdata -> DW_ATVAL_INT <$> getSLEB128
-    DW_FORM_strp -> do
-      offset <- desrGetOffset end (drEncoding dr)
-      let str = B.drop (fromIntegral offset) (dsStrSection dc)
-      pure $! DW_ATVAL_STRING (B.takeWhile (/= 0) str)
-    DW_FORM_udata -> DW_ATVAL_UINT <$> getULEB128
-    DW_FORM_ref_addr -> DW_ATVAL_UINT <$> desrGetOffset end enc
-    DW_FORM_ref1 -> DW_ATVAL_REF . inCU cu <$> getWord8
-    DW_FORM_ref2 -> DW_ATVAL_REF . inCU cu <$> derGetW16 end
-    DW_FORM_ref4 -> DW_ATVAL_REF . inCU cu <$> derGetW32 end
-    DW_FORM_ref8 -> DW_ATVAL_REF . inCU cu <$> derGetW64 end
-    DW_FORM_ref_udata -> DW_ATVAL_REF . inCU cu <$> getULEB128
+    DW_FORM_strx -> parseStrxOfBytesz getULEB128
+    DW_FORM_addrx -> parseAddrxOfBytesz getULEB128
+    DW_FORM_strx1 -> parseStrxOfBytesz getWord8
+    DW_FORM_strx2 -> parseStrxOfBytesz (derGetW16 end)
+    DW_FORM_strx3 -> parseStrxOfBytesz (derGetW24 end)
+    DW_FORM_strx4 -> parseStrxOfBytesz (derGetW32 end)
+    DW_FORM_addrx1 -> parseAddrxOfBytesz getWord8
+    DW_FORM_addrx2 -> parseAddrxOfBytesz (derGetW16 end)
+    DW_FORM_addrx3 -> parseAddrxOfBytesz (derGetW24 end)
+    DW_FORM_addrx4 -> parseAddrxOfBytesz (derGetW32 end)
+    DW_FORM_ref1 -> RealizedAttr . DW_ATVAL_REF . inCU cu <$> getWord8
+    DW_FORM_ref2 -> RealizedAttr . DW_ATVAL_REF . inCU cu <$> derGetW16 end
+    DW_FORM_ref4 -> RealizedAttr . DW_ATVAL_REF . inCU cu <$> derGetW32 end
+    DW_FORM_ref8 -> RealizedAttr . DW_ATVAL_REF . inCU cu <$> derGetW64 end
+    DW_FORM_ref_udata ->  RealizedAttr . DW_ATVAL_REF . inCU cu <$> getULEB128
     DW_FORM_indirect -> getForm cuContext . DW_FORM =<< getULEB128
-    -- new in Dwarf version 4
-    DW_FORM_sec_offset -> DW_ATVAL_UINT <$> desrGetOffset end enc
-    DW_FORM_exprloc -> DW_ATVAL_BLOB <$> getByteStringLen getULEB128
-    DW_FORM_flag_present -> pure $ DW_ATVAL_BOOL True
-    DW_FORM_ref_sig8 -> DW_ATVAL_UINT . fromIntegral <$> derGetW64 end
-    DW_FORM_strx -> unimplForm form
-    DW_FORM_addrx -> unimplForm form
-    DW_FORM_ref_sup4 -> unimplForm form
-    DW_FORM_strp_sup -> unimplForm form
-    DW_FORM_data16 -> unimplForm form
-    DW_FORM_line_strp -> unimplForm form
-    DW_FORM_implicit_const -> unimplForm form
-    DW_FORM_loclistx -> unimplForm form
-    DW_FORM_rnglistx -> undefined
-    DW_FORM_ref_sup8 -> undefined
-    DW_FORM_strx1 -> unimplForm form
-    DW_FORM_strx2 -> unimplForm form
-    DW_FORM_strx3 -> unimplForm form
-    DW_FORM_strx4 -> unimplForm form
-    DW_FORM_addrx1 -> unimplForm form
-    DW_FORM_addrx2 -> unimplForm form
-    DW_FORM_addrx3 -> unimplForm form
-    DW_FORM_addrx4 -> unimplForm form
-    _ -> unimplForm form
+    _ -> RealizedAttr <$> getEvaluableForm dc end enc tgt form
+  where
+      -- shared structure between addrx and strx operations where an offset is used to index an array and that value is an offset into a further table
+      -- takes a parser for the offset, a function that consumes the offset and produces the final attribute values and a way to retrieve the base offset
+      -- for the target table
+      parseIntegralOff :: 
+        (MonadFail m, Show a, Integral a) =>
+        Sections ->
+        Get a ->
+        (Sections -> SectionOffset-> m DW_ATVAL) ->
+        (CUContext -> Maybe Word64) ->
+        Word64 ->
+        Get (ParsedForm m)
+      parseIntegralOff sections getter f getBase addrSize =
+        do
+          index <- getter
+          let off = fromIntegral index * addrSize
+          pure $ DelayedAttr (\ctx ->
+              let base = fromMaybe 0 (getBase ctx)
+                  secOff = SectionOffset (fromIntegral off + base) in
+                  f sections secOff)
+
+unpackDelayed :: (Monad m) => CUContext -> ParsedForm m -> m DW_ATVAL
+unpackDelayed ctx (DelayedAttr f) = f ctx
+unpackDelayed _ (RealizedAttr attr) = pure attr
+
+-- | Update a CUContext field if the attributes are equal
+updateFld :: 
+  (CUContext -> Maybe Word64) ->
+  (CUContext -> Maybe Word64 -> CUContext) ->
+  DW_AT ->
+  DW_AT ->
+  ParsedForm (StateT CUContext Get) ->
+  StateT CUContext Get ()
+updateFld getter setter expectedAt actAt val =
+  do
+    ctx <- get
+    Control.Monad.when (expectedAt == actAt) $ do
+        uval <- unpackDelayed ctx val
+        let nval = setter ctx (((\case DW_ATVAL_UINT x -> Just x; _ -> Nothing) uval) <|> (getter ctx)) in
+          put nval
+
+-- | Compute attribute values from a list of form codes. State mantains the value of addrbase and
+-- string offset base within the 'CUContext'
+computeAttrs :: [(DW_AT, DW_FORM)] -> StateT CUContext Get [(DW_AT, ParsedForm (StateT CUContext Get) )]
+computeAttrs abbrevs = forM abbrevs $
+  \(attr, form) -> do
+    cuContext <- get
+    (at, atval) <- (attr,) <$> lift (getForm cuContext form)
+    _ <- updateFld cuAddrBase (\x y -> x {cuAddrBase = y}) DW_AT_addr_base at atval
+    _ <- updateFld cuStringOffsetBase (\x y -> x {cuStringOffsetBase = y}) DW_AT_str_offsets_base at atval
+    pure (at, atval)
 
 getDIEAndDescendants :: CUContext -> DieID -> Get (Maybe DIE)
 getDIEAndDescendants cuContext thisId = do
@@ -497,24 +545,48 @@ getDIEAndDescendants cuContext thisId = do
   if abbrid == 0
     then pure Nothing
     else do
-      let abbrev = cuAbbrevMap cuContext M.! (AbbrevId abbrid)
+      let abbrev = cuAbbrevMap cuContext M.! AbbrevId abbrid
           tag = abbrevTag abbrev
-      values <-
-        forM (abbrevAttrForms abbrev) $ \(attr, form) -> do
-          (\val -> (attr, val)) <$> getForm cuContext form
+      -- Compute values and the CuContext (potentially updating str offset and addr bases)
+      (values, updatedCuContext) <- runStateT (computeAttrs (abbrevAttrForms abbrev)) cuContext
+      -- use the updated context to evaluate delayed attributes
+      realizedValues <- forM values (\(at, prsed) -> 
+        let m = unpackDelayed updatedCuContext prsed in 
+          (at,) <$> evalStateT m cuContext)
       children <-
         if abbrevChildren abbrev
-          then getDieAndSiblings cuContext
+          then getDieAndSiblings updatedCuContext
           else pure []
       pure $
         Just $
           DIE
             { dieId = thisId,
               dieTag = tag,
-              dieAttributes = values,
+              dieAttributes = realizedValues,
               dieChildren = children,
-              dieReader = cuReader cuContext
+              dieReader = cuReader updatedCuContext
             }
+
+
+{-
+Note [DWARF Version Support]
+
+This library supports parsing DWARFv4 and DWARFv5. The support for DWARFv5 is incomplete.
+The compile unit (and line program unit) headers are used to extract the DWARF version and parsing is performed conditionally
+according to the specification for a given version. The breaking changes between v4 and v5 are decribed in the DWARF standard: https://dwarfstd.org/dwarf5std.html. 
+The changes between versions supported in this library include:
+
+* New header ordering in the compilation unit header parsed in 'getCUHeader'. 
+* Implementations for new forms of attribute values: addrx, data_16, strp, strx (in 'getForm'). These new forms access new sections
+such as 'dsStrOffsets'
+* The line progam header is changed substantially and parsed separately depending on version in 'getLNE'
+
+Further [work](https://github.com/GaloisInc/dwarf/issues/21) is currently required to support:
+* loclistx (new loc list format)
+* rnglistx (new range list format)
+* Split object files
+
+-}
 
 getCUHeader ::
   (Endianess, Sections) ->
@@ -528,21 +600,33 @@ getCUHeader (endian, dwarfSections) abbrevMapCache (CUOffset cuOff) = do
   (enc, unitLength) <- getDwarfSize endian
   postLength <- Get.bytesRead
   let totalLength = fromIntegral (postLength - start) + unitLength
-  _version <- derGetW16 endian
-  abbrevOffset <- desrGetOffset endian enc
-  addr_size <- getWord8
+  version <- derGetW16 endian
+  unitType <- if version >= 5 then Just <$> getWord8 else pure Nothing
+  -- in v5 address_size first, in v4 abbrevoffset
+  (abbrevOffset, addr_size) <- if version >= 5 then
+      do
+        addr_sizeRd <- getWord8
+        abbrevOffsetRd <- desrGetOffset endian enc
+        pure (abbrevOffsetRd, addr_sizeRd)
+    else
+      do
+        abbrevOffsetRd <- desrGetOffset endian enc
+        addr_sizeRd <- getWord8
+        pure (abbrevOffsetRd, addr_sizeRd)
   postHeader <- Get.bytesRead
   tgt <- case addr_size of
-    4 -> pure $ TargetSize32
-    8 -> pure $ TargetSize64
+    4 -> pure TargetSize32
+    8 -> pure TargetSize64
     _ -> fail $ "Invalid address size: " ++ show addr_size
   (abbrevMap, nextAbbrevMapCache) <-
     case M.lookup abbrevOffset abbrevMapCache of
       Just r -> pure (r, abbrevMapCache)
       Nothing ->
-        case getAbbrevMap abbrevOffset (dsAbbrevSection dwarfSections) of
-          Left e -> fail e
-          Right m -> pure $ (m, M.insert abbrevOffset m abbrevMapCache)
+        do
+          abbrev <- dsAbbrevSection dwarfSections
+          case getAbbrevMap abbrevOffset abbrev of
+            Left e -> fail e
+            Right m -> pure (m, M.insert abbrevOffset m abbrevMapCache)
   let ctx =
         CUContext
           { cuReader = reader endian enc tgt,
@@ -552,7 +636,10 @@ getCUHeader (endian, dwarfSections) abbrevMapCache (CUOffset cuOff) = do
             cuSections = dwarfSections,
             cuDieOffset = DIEOffset (cuOff + fromIntegral (postHeader - start)),
             cuNextOffset = CUOffset (cuOff + totalLength),
-            cuNextAbbrevCache = nextAbbrevMapCache
+            cuNextAbbrevCache = nextAbbrevMapCache,
+            cuUnitType = unitType,
+            cuAddrBase = Nothing,
+            cuStringOffsetBase = Nothing
           }
   pure $! ctx
 
@@ -563,7 +650,8 @@ getCUContext ::
   CUOffset ->
   Maybe (Either String CUContext)
 getCUContext end s m (CUOffset off) = do
-  let bs = B.drop (fromIntegral off) (dsInfoSection s)
+  info <- dsInfoSection s
+  let bs = B.drop (fromIntegral off) info
   if B.null bs
     then Nothing
     else case Get.runGetOrFail (getCUHeader (end, s) m (CUOffset off)) (L.fromChunks [bs]) of
@@ -575,8 +663,8 @@ dieAndDescendants ::
   DIEOffset ->
   Either String (Maybe DIE)
 dieAndDescendants ctx (DIEOffset off) = do
-  let sec = dsInfoSection (cuSections ctx)
-
+  sec <-
+    eitherOfStrError $ dsInfoSection (cuSections ctx)
   let bs = L.fromChunks [B.drop (fromIntegral off) sec]
   let thisID = DieID off
   case Get.runGetOrFail (getDIEAndDescendants ctx thisID) bs of

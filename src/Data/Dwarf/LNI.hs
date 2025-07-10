@@ -1,14 +1,22 @@
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE TupleSections #-}
+
 module Data.Dwarf.LNI where
 
-import           Control.Monad (replicateM)
+import           Control.Monad (replicateM, forM)
 import           Data.Binary (Binary(..), Get)
-import           Data.Binary.Get (getWord8)
-import qualified Data.Binary.Get as Get
-import qualified Data.ByteString as B
+import           Data.Binary.Get (getWord8, bytesRead)
+import           Data.Dwarf.AT
+import           Data.Dwarf.Form
 import           Data.Dwarf.Internals
 import           Data.Dwarf.Reader
 import           Data.Int (Int8, Int64)
+import           Data.Maybe (fromMaybe)
 import           Data.Word (Word8, Word64)
+import           qualified Data.Map as Map
+import qualified Data.ByteString as B
 
 -- Section 7.21 - Line Number Information
 data DW_LNI
@@ -176,10 +184,10 @@ defaultLNE is_stmt files = DW_LNE
 -- | Retrieves the line information for a DIE from a given substring
 -- of the .debug_line section. The offset into the .debug_line section
 -- is obtained from the DW_AT_stmt_list attribute of a DIE.
-parseLNE :: Endianess -> TargetSize -> Word64 -> B.ByteString -> ([B.ByteString], [DW_LNE])
-parseLNE endianess target64 offset bs =
+parseLNE :: Sections -> Endianess -> TargetSize -> Word64 -> B.ByteString -> ([B.ByteString], [DW_LNE])
+parseLNE secs endianess target64 offset bs =
   let bs' = B.drop (fromIntegral offset) bs
-   in case tryStrictGet (getLNE endianess target64) bs' of
+   in case tryStrictGet (getLNE secs endianess target64) bs' of
         Left (_, msg) -> error msg
         Right (_, _, r) -> r
 
@@ -196,12 +204,108 @@ getDebugLineFileNames = go []
             file_length <- getULEB128
             go ((fileName, dir_index, last_mod, file_length):prev)
 
-getLNE :: Endianess -> TargetSize -> Get ([B.ByteString], [DW_LNE])
-getLNE endianess target64 = do
-    (enc, size) <- getDwarfSize endianess
-    pos <- Get.bytesRead
-    let endPos = fromIntegral pos + size
-    _version                   <- derGetW16 endianess
+-- | A line program header content type
+newtype DW_LNCT = DW_LNCT Word64 
+    deriving (Eq,Ord)
+
+pattern DW_LNCT_path :: DW_LNCT
+pattern DW_LNCT_path = DW_LNCT 0x1
+
+pattern DW_LNCT_directory_index :: DW_LNCT
+pattern DW_LNCT_directory_index = DW_LNCT 0x2
+
+pattern DW_LNCT_size :: DW_LNCT
+pattern DW_LNCT_size = DW_LNCT 0x4
+
+-- | An entry form which is a pair of the content type and form code
+data LineFileEntryFormat = LineFileEntryFormat {contentType :: DW_LNCT, formCode :: DW_FORM}
+
+-- | Parse a single line entry given a specified format
+parseLineEntryToVal ::  Sections -> Endianess -> Encoding -> TargetSize -> LineFileEntryFormat -> Get (DW_LNCT, DW_ATVAL)
+parseLineEntryToVal secs end encoding tgt (LineFileEntryFormat {contentType=ct, formCode=form'}) = 
+    (ct,) <$> getEvaluableForm secs end encoding tgt form'
+
+-- | Parses an entry format (pair of content type and form code)
+parseFileEntryForm :: Get LineFileEntryFormat
+parseFileEntryForm = do
+    contentTy <- getULEB128
+    formCode' <- getULEB128
+    pure $ LineFileEntryFormat {contentType=DW_LNCT contentTy, formCode=DW_FORM formCode'}
+
+-- | Parses a list of line entry formats
+parseFormList :: Int -> Get [LineFileEntryFormat]
+parseFormList ct = 
+    replicateM ct parseFileEntryForm
+
+-- | A v5 line header entry which maps content types to their values
+newtype FileLineHeaderEntry = FileLineHeaderEntry (Map.Map DW_LNCT DW_ATVAL)
+
+-- | Parse a v5 header file entry by parsing the list of 'LineFileEntryFormat' of content formats
+parseEntry :: Sections -> Endianess -> Encoding -> TargetSize -> [LineFileEntryFormat] -> Get FileLineHeaderEntry
+parseEntry secs end enc tgt forms = FileLineHeaderEntry . Map.fromList <$> forM forms (parseLineEntryToVal secs end enc tgt)
+
+-- | Parse an array of entries given a declared format
+parseEntries :: Int -> Sections -> Endianess -> Encoding -> TargetSize -> [LineFileEntryFormat] -> Get [FileLineHeaderEntry]
+parseEntries entNum secs end encoding tgt ents = replicateM entNum (parseEntry secs end encoding tgt ents)
+
+
+getWithDefault :: FileLineHeaderEntry -> DW_LNCT -> (DW_ATVAL -> Maybe a) -> a -> a 
+getWithDefault (FileLineHeaderEntry mp) k f d =
+    fromMaybe d (do 
+        atVal <- Map.lookup k mp
+        f atVal)
+
+-- | Converts a v5 file entry to a legacy file by extracting the relevant content types
+createLegacyFileName :: FileLineHeaderEntry -> LegacyFileName 
+createLegacyFileName hd = 
+    let defU64 lc d = getWithDefault hd lc (\case {DW_ATVAL_UINT s -> Just s; _ -> Nothing}) d
+        pth = getWithDefault hd DW_LNCT_path (\case {DW_ATVAL_STRING s -> Just s; _ -> Nothing}) ""
+        dirIndex = defU64 DW_LNCT_directory_index 0 
+        size = defU64 DW_LNCT_size 0 
+    in (pth, dirIndex, 0, size)
+
+-- | Given a list of 'LineFileEntryFormat' representing a pair of a content type code and format code, parses 
+-- a 'LegacyFileName'
+parsePaths :: Int -> Sections -> Endianess -> Encoding -> TargetSize -> [LineFileEntryFormat] -> Get [LegacyFileName]
+parsePaths entNum secs end encoding tgt formEnts = 
+    let ents = parseEntries entNum secs end encoding tgt formEnts in 
+      map createLegacyFileName  <$> ents
+
+-- | The legacy datastructure for filename configurations (name, dir_index, last_mod, length)
+type LegacyFileName = (B.ByteString, Word64, Word64, Word64)
+data ParsedLineHeader = ParsedLineHeader {   
+    lineBase :: Int8, 
+    lineRange :: Word8, 
+    opCodeBase :: Word8, 
+    minimumInstructionLength :: Word8, 
+    defaultIsStmt :: Bool,
+    fileNames :: [LegacyFileName] }
+
+parseLNEV5 :: Sections -> Endianess -> Encoding -> TargetSize ->  Get ParsedLineHeader 
+parseLNEV5 secs endianess enc target64  = do 
+    _addrSize <- getWord8
+    _segSelectorSize <- getWord8
+    _header_length      <- desrGetOffset endianess enc
+    minimum_instruction_length <- getWord8
+    _maximum_operations_per_instruction <- getWord8
+    default_is_stmt            <- (/= 0) <$> getWord8
+    line_base                  <- get :: Get Int8
+    line_range                 <- getWord8
+    opcode_base                <- getWord8
+    _standard_opcode_lengths   <- replicateM (fromIntegral opcode_base - 1) getWord8
+    dirEntryCount <- getWord8
+    dirForms <- parseFormList (fromIntegral dirEntryCount)
+    dirCount <- getULEB128
+    _includes <- parsePaths (fromIntegral dirCount) secs endianess enc target64 dirForms
+    fileNameEntryCount <- getWord8
+    fileForms <- parseFormList (fromIntegral fileNameEntryCount)
+    fileNamesCount <- getULEB128
+    fileNames' <- parsePaths (fromIntegral fileNamesCount) secs endianess enc target64 fileForms
+    pure ParsedLineHeader {lineBase=line_base, lineRange=line_range, opCodeBase=opcode_base, minimumInstructionLength=minimum_instruction_length, 
+        defaultIsStmt=default_is_stmt, fileNames=fileNames'}
+
+parseLNEV4 :: Endianess -> Encoding -> Get ParsedLineHeader 
+parseLNEV4 endianess enc = do 
     _header_length             <- desrGetOffset endianess enc
     minimum_instruction_length <- getWord8
     default_is_stmt            <- (/= 0) <$> getWord8
@@ -210,17 +314,33 @@ getLNE endianess target64 = do
     opcode_base                <- getWord8
     _standard_opcode_lengths   <- replicateM (fromIntegral opcode_base - 1) getWord8
     _include_directories       <- whileM (\b -> not (B.null b)) getByteStringNul
-    file_names                 <- getDebugLineFileNames
-    curPos <- fromIntegral <$> Get.bytesRead
+    file_names'                 <- getDebugLineFileNames
+    pure ParsedLineHeader {lineBase=line_base, lineRange=line_range, opCodeBase=opcode_base, minimumInstructionLength=minimum_instruction_length, 
+        defaultIsStmt=default_is_stmt, fileNames=file_names'} 
+
+getLNE :: Sections -> Endianess -> TargetSize -> Get ([B.ByteString], [DW_LNE])
+getLNE secs endianess target64 = do
+    (enc, size) <- getDwarfSize endianess
+    pos <- bytesRead
+    let endPos = fromIntegral pos + size
+    version                   <- derGetW16 endianess
+    prsed <- if version >= 5 then parseLNEV5 secs endianess enc target64 else parseLNEV4 endianess enc
+    curPos <- fromIntegral <$> bytesRead
     -- Check if we have reached the end of the section.
+    let fnames = fileNames prsed
+    let line_base = lineBase prsed
+    let opcode_base = opCodeBase prsed
+    let line_range = lineRange prsed 
+    let minimum_instruction_length = minimumInstructionLength prsed
+    let default_is_stmt = defaultIsStmt prsed
     if endPos <= curPos
-      then pure (map (\(name, _, _, _) -> name) file_names, [])
+      then pure (map (\(name, _, _, _) -> name) fnames, [])
       else do
         line_program <-
           fmap (++ [DW_LNE_end_sequence]) .
           whileM (/= DW_LNE_end_sequence) .
             getDW_LNI endianess target64 (fromIntegral line_base) line_range opcode_base $
             fromIntegral minimum_instruction_length
-        let initial_state = defaultLNE default_is_stmt file_names
+        let initial_state = defaultLNE default_is_stmt fnames
             line_matrix = stepLineMachine default_is_stmt minimum_instruction_length initial_state line_program
-         in pure (map (\(name, _, _, _) -> name) file_names, line_matrix)
+         in pure (map (\(name, _, _, _) -> name) fnames, line_matrix)

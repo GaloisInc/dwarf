@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Data.Dwarf.Internals
   ( getSLEB128
   , getULEB128
@@ -9,6 +11,16 @@ module Data.Dwarf.Internals
   , whileJust
   , strictGet
   , getWhileNotEmpty
+  , Sections(SectionContents)
+  , requiredSection
+  , dsStrSection
+  , dsAbbrevSection
+  , dsInfoSection
+  , dsRangesSection
+  , dsLineSection
+  , dsLineStrSection
+  , dsStrOffsets
+  , dsAddr
   ) where
 
 import           Data.Binary.Get (getByteString, getWord8, Get, runGet)
@@ -18,6 +30,49 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
 import           Data.Int (Int64)
 import           Data.Word (Word64)
+
+
+-- | Sections to retrieve dwarf information from, maps section names to 'B.ByteString'
+newtype Sections = SectionContents (B.ByteString -> Maybe B.ByteString)
+
+
+-- | Fails if a section is not present in the mapping
+requiredSection :: (MonadFail m) => B.ByteString -> Sections -> m B.ByteString
+requiredSection nm (SectionContents sections) =
+  maybe (fail $ "Required section: " ++  show nm) pure (sections nm)
+
+-- | The DWARF string section (a section populated by null terminated strings)
+dsStrSection :: (MonadFail m) => Sections -> m B.ByteString
+dsStrSection = requiredSection ".debug_str"
+
+-- | The DWARF abbrev table describing attributes and tags
+dsAbbrevSection :: (MonadFail m) => Sections -> m B.ByteString
+dsAbbrevSection = requiredSection ".debug_abbrev"
+
+-- | The core DWARF info section containing DIEs
+dsInfoSection :: (MonadFail m) => Sections -> m B.ByteString
+dsInfoSection = requiredSection ".debug_info"
+
+-- | The DWARF line program section containing the line program and its header
+dsLineSection :: (MonadFail m) => Sections -> m B.ByteString
+dsLineSection = requiredSection ".debug_line"
+
+-- | Another DWARF string section like debug_str except for the line program
+dsLineStrSection :: (MonadFail m) => Sections -> m B.ByteString
+dsLineStrSection = requiredSection ".debug_line_str"
+
+-- | Section containing the range list
+dsRangesSection :: (MonadFail m) => Sections -> m B.ByteString
+dsRangesSection = requiredSection ".debug_ranges"
+
+-- | An array of offsets into the string stable for strx operations.
+dsStrOffsets :: (MonadFail m) => Sections -> m B.ByteString
+dsStrOffsets = requiredSection ".debug_str_offsets"
+
+-- | An array of addresses accessed by addrx operations.
+dsAddr :: (MonadFail m) => Sections -> m B.ByteString
+dsAddr = requiredSection ".debug_addr"
+
 
 whileJust :: (Applicative m, Monad m) => m (Maybe a) -> m [a]
 whileJust act =
