@@ -581,7 +581,7 @@ The changes between versions supported in this library include:
 such as 'dsStrOffsets'
 * The line progam header is changed substantially and parsed separately depending on version in 'getLNE'
 
-Further work is currently required to support:
+Further [work](https://github.com/GaloisInc/dwarf/issues/21) is currently required to support:
 * loclistx (new loc list format)
 * rnglistx (new range list format)
 * Split object files
