@@ -484,7 +484,14 @@ getForm cuContext form = do
       -- shared structure between addrx and strx operations where an offset is used to index an array and that value is an offset into a further table
       -- takes a parser for the offset, a function that consumes the offset and produces the final attribute values and a way to retrieve the base offset
       -- for the target table
-      parseIntegralOff :: (MonadFail m, Show a, Integral a) => Sections -> Get a -> (Sections -> SectionOffset-> m DW_ATVAL) -> (CUContext -> Maybe Word64) -> Word64 -> Get (ParsedForm m)
+      parseIntegralOff :: 
+        (MonadFail m, Show a, Integral a) =>
+        Sections ->
+        Get a ->
+        (Sections -> SectionOffset-> m DW_ATVAL) ->
+        (CUContext -> Maybe Word64) ->
+        Word64 ->
+        Get (ParsedForm m)
       parseIntegralOff sections getter f getBase addrSize =
         do
           index <- getter
@@ -503,7 +510,13 @@ unpackDelayed _ (RealizedAttr attr) = pure attr
 
 -- TODO: I really wish we had lenses here
 -- | Update a CUContext field if the attributes are equal
-updateFld :: (CUContext -> Maybe Word64) -> (CUContext -> Maybe Word64 -> CUContext) -> DW_AT -> DW_AT ->  ParsedForm (StateT CUContext Get) -> StateT CUContext Get ()
+updateFld :: 
+  (CUContext -> Maybe Word64) ->
+  (CUContext -> Maybe Word64 -> CUContext) ->
+  DW_AT ->
+  DW_AT ->
+  ParsedForm (StateT CUContext Get) ->
+  StateT CUContext Get ()
 updateFld getter setter expectedAt actAt val =
   do
     ctx <- get
