@@ -13,14 +13,14 @@ module Data.Dwarf.Internals
   , getWhileNotEmpty
   , Sections(SectionContents)
   , requiredSection
-  , dsStrSection,
+  , dsStrSection
   , dsAbbrevSection
   , dsInfoSection
   , dsRangesSection
   , dsLineSection
   , dsLineStrSection
   , dsStrOffsets
-  dsAddr
+  , dsAddr
   ) where
 
 import           Data.Binary.Get (getByteString, getWord8, Get, runGet)
