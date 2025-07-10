@@ -9,15 +9,15 @@
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 module Data.Dwarf.Form where
 
-import qualified Data.Map.Strict as Map
+import           Control.Monad (replicateM)
+import           Data.Binary.Get
+import           Data.Dwarf.AT
+import           Data.Dwarf.Internals
+import           Data.Dwarf.Reader
 import           Data.Word (Word64)
 import           Numeric (showHex)
-import Data.Binary.Get
-import Data.Dwarf.AT
-import Data.Dwarf.Reader
-import Data.Dwarf.Internals
 import qualified Data.ByteString as B
-import Control.Monad (replicateM)
+import qualified Data.Map.Strict as Map
 
 newtype DW_FORM = DW_FORM Word64
   deriving (Eq,Ord)
