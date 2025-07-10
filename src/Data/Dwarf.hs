@@ -7,7 +7,8 @@
 {-# LANGUAGE TupleSections #-}
 
 -- | Parses the DWARF 2-5 specifications at http://www.dwarfstd.org given
--- the debug sections in ByteString form.
+-- the debug sections in ByteString form. Version 5 DWARF parsing is incomplete, see: [DWARF Version Support]
+-- for more info.
 module Data.Dwarf
   ( -- * Encoding and target information
     Encoding (..),
