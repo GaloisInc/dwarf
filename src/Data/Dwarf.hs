@@ -122,6 +122,7 @@ dieID (DieID x) = x
 inCU :: Integral a => CUOffset -> a -> DieID
 inCU (CUOffset base) x = DieID (base + fromIntegral x)
 
+-- | Makes a section wrapper given a function that looks up a section given a name
 mkSections :: (B.ByteString -> Maybe B.ByteString) -> Sections
 mkSections = SectionContents
 
