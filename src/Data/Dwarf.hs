@@ -526,7 +526,7 @@ updateFld getter setter expectedAt actAt val =
           put nval
 
 -- | Compute attribute values from a list of form codes. State mantains the value of addrbase and
--- string offset base wihtin the 'CUContext'
+-- string offset base within the 'CUContext'
 computeAttrs :: [(DW_AT, DW_FORM)] -> StateT CUContext Get [(DW_AT, ParsedForm (StateT CUContext Get) )]
 computeAttrs abbrevs =
           forM abbrevs $
