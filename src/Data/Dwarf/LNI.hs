@@ -238,7 +238,7 @@ parseFormList ct =
     replicateM ct parseFileEntryForm
 
 -- | A v5 line header entry which maps content types to their values
-data FileLineHeaderEntry = FileLineHeaderEntry (Map.Map DW_LNCT DW_ATVAL)
+newtype FileLineHeaderEntry = FileLineHeaderEntry (Map.Map DW_LNCT DW_ATVAL)
 
 -- | Parse a v5 header file entry by parsing the list of 'LineFileEntryFormat' of content formats
 parseEntry :: Sections -> Endianess -> Encoding -> TargetSize -> [LineFileEntryFormat] -> Get FileLineHeaderEntry

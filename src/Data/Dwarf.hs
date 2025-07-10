@@ -417,8 +417,9 @@ getDieAndSiblings cuContext = do
     br <- Get.bytesRead
     getDIEAndDescendants cuContext (DieID (off + fromIntegral br))
 
+-- | An offset into a section. Used by strx, addrx, and line_strx as an offset into the debug str offset section, 
+-- the address section, or the line str section.
 newtype SectionOffset = SectionOffset Word64
-
 
 -- Retrieves an address from the "debug_addr" array at the offset specified by the given 'SectionOffset'.
 -- This type of address form was added in DWARFv5.
