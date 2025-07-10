@@ -86,6 +86,7 @@ module Data.Dwarf
   )
 where
 
+import Control.Applicative ((<|>))
 import Control.Monad (forM, when)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.State (StateT (runStateT), get, put, evalStateT)
@@ -151,11 +152,11 @@ data CUContext = CUContext
     cuNextOffset :: !CUOffset,
     cuNextAbbrevCache :: !(M.Map Word64 (M.Map AbbrevId DW_ABBREV)),
     cuUnitType :: !(Maybe Word8),
-    -- | The base from which all offsets into the debug addr section using addrx are computed for this CU
+    -- | The base from which all offsets into the debug addr section using @addrx@ are computed for this CU.
     -- Only present in v5
     cuAddrBase :: !(Maybe Word64),
     -- | The base from which all offsets into the string offsets section are computed for this CU
-    -- using the strx form. Only present in v5
+    -- using the @strx@ form. Only present in v5
     cuStringOffsetBase :: !(Maybe Word64)
   }
 
@@ -421,11 +422,11 @@ getDieAndSiblings cuContext = do
     br <- Get.bytesRead
     getDIEAndDescendants cuContext (DieID (off + fromIntegral br))
 
--- | An offset into a section. Used by strx, addrx, and line_strx as an offset into the debug str offset section, 
+-- | An offset into a section. Used by @strx@, @addrx@, and @line_strx@ as an offset into the debug str offset section, 
 -- the address section, or the line str section.
 newtype SectionOffset = SectionOffset Word64
 
--- Retrieves an address from the "debug_addr" array at the offset specified by the given 'SectionOffset'.
+-- Retrieves an address from the @debug_addr@ array at the offset specified by the given 'SectionOffset'.
 -- This type of address form was added in DWARFv5.
 interpretAddrx :: (MonadFail m) => Endianess -> TargetSize -> Sections -> SectionOffset -> m DW_ATVAL
 interpretAddrx end tgt secs (SectionOffset addrOff)  =
@@ -506,9 +507,6 @@ getForm cuContext form = do
                   secOff = SectionOffset (fromIntegral off + base) in
                   f sections secOff)
 
-orElse :: Maybe a -> Maybe a -> Maybe a
-orElse left right = maybe left Just right
-
 unpackDelayed :: (Monad m) => CUContext -> ParsedForm m -> m DW_ATVAL
 unpackDelayed ctx (DelayedAttr f) = f ctx
 unpackDelayed _ (RealizedAttr attr) = pure attr
@@ -527,20 +525,19 @@ updateFld getter setter expectedAt actAt val =
     ctx <- get
     Control.Monad.when (expectedAt == actAt) $ do
         uval <- unpackDelayed ctx val
-        let nval = setter ctx (orElse (getter ctx) ((\case DW_ATVAL_UINT x -> Just x; _ -> Nothing) uval)) in
+        let nval = setter ctx (((\case DW_ATVAL_UINT x -> Just x; _ -> Nothing) uval) <|> (getter ctx)) in
           put nval
 
 -- | Compute attribute values from a list of form codes. State mantains the value of addrbase and
 -- string offset base within the 'CUContext'
 computeAttrs :: [(DW_AT, DW_FORM)] -> StateT CUContext Get [(DW_AT, ParsedForm (StateT CUContext Get) )]
-computeAttrs abbrevs =
-          forM abbrevs $
-            \(attr, form) -> do
-              cuContext <- get
-              (at, atval) <- (attr,) <$> lift (getForm cuContext form)
-              _ <- updateFld cuAddrBase (\x y -> x {cuAddrBase = y}) DW_AT_addr_base at atval
-              _ <- updateFld cuStringOffsetBase (\x y -> x {cuStringOffsetBase = y}) DW_AT_str_offsets_base at atval
-              pure (at, atval)
+computeAttrs abbrevs = forM abbrevs $
+  \(attr, form) -> do
+    cuContext <- get
+    (at, atval) <- (attr,) <$> lift (getForm cuContext form)
+    _ <- updateFld cuAddrBase (\x y -> x {cuAddrBase = y}) DW_AT_addr_base at atval
+    _ <- updateFld cuStringOffsetBase (\x y -> x {cuStringOffsetBase = y}) DW_AT_str_offsets_base at atval
+    pure (at, atval)
 
 getDIEAndDescendants :: CUContext -> DieID -> Get (Maybe DIE)
 getDIEAndDescendants cuContext thisId = do
@@ -604,10 +601,9 @@ getCUHeader (endian, dwarfSections) abbrevMapCache (CUOffset cuOff) = do
   postLength <- Get.bytesRead
   let totalLength = fromIntegral (postLength - start) + unitLength
   version <- derGetW16 endian
-  let tversion = version
-  unitType <- if tversion >= 5 then Just <$> getWord8 else pure Nothing
+  unitType <- if version >= 5 then Just <$> getWord8 else pure Nothing
   -- in v5 address_size first, in v4 abbrevoffset
-  (abbrevOffset, addr_size) <- if tversion >= 5 then
+  (abbrevOffset, addr_size) <- if version >= 5 then
       do
         addr_sizeRd <- getWord8
         abbrevOffsetRd <- desrGetOffset endian enc
