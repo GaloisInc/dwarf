@@ -1,11 +1,10 @@
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE TupleSections #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-#LANGUAGE GeneralisedNewtypeDeriving #-}
-{-# LANGUAGE InstanceSigs #-}
-{-# LANGUAGE LambdaCase #-}
 
 -- | Parses the DWARF 2-5 specifications at http://www.dwarfstd.org given
 -- the debug sections in ByteString form.
@@ -88,11 +87,10 @@ module Data.Dwarf
 where
 
 import Control.Monad (forM, when)
+import Control.Monad.Trans.Class (lift)
+import Control.Monad.Trans.State (StateT (runStateT), get, put, evalStateT)
 import Data.Binary (Get)
 import Data.Binary.Get (getWord8)
-import qualified Data.Binary.Get as Get
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Lazy as L
 import Data.Dwarf.AT
 import Data.Dwarf.ATE
 import Data.Dwarf.CFA
@@ -104,11 +102,12 @@ import Data.Dwarf.OP
 import Data.Dwarf.Reader
 import Data.Dwarf.TAG
 import Data.Dwarf.Types
-import qualified Data.Map.Strict as M
-import Data.Word (Word64, Word8)
 import Data.Maybe (fromMaybe)
-import Control.Monad.Trans.State (StateT (runStateT), get, put, evalStateT)
-import Control.Monad.Trans.Class (lift)
+import Data.Word (Word64, Word8)
+import qualified Data.Binary.Get as Get
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as L
+import qualified Data.Map.Strict as M
 
 -- | The offset of a compile unit in a file from
 -- the start of the file.
