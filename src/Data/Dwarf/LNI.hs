@@ -273,8 +273,13 @@ parsePaths entNum secs end encoding tgt formEnts =
 
 -- | The legacy datastructure for filename configurations (name, dir_index, last_mod, length)
 type LegacyFileName = (B.ByteString, Word64, Word64, Word64)
-data ParsedLineHeader = ParsedLineHeader {lineBase :: Int8, lineRange :: Word8, opCodeBase :: Word8, minimumInstructionLength :: Word8, defaultIsStmt :: Bool,
-    fileNames :: [LegacyFileName]}
+data ParsedLineHeader = ParsedLineHeader {   
+    lineBase :: Int8, 
+    lineRange :: Word8, 
+    opCodeBase :: Word8, 
+    minimumInstructionLength :: Word8, 
+    defaultIsStmt :: Bool,
+    fileNames :: [LegacyFileName] }
 
 parseLNEV5 :: Sections -> Endianess -> Encoding -> TargetSize ->  Get ParsedLineHeader 
 parseLNEV5 secs endianess enc target64  = do 
