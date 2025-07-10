@@ -512,7 +512,6 @@ unpackDelayed :: (Monad m) => CUContext -> ParsedForm m -> m DW_ATVAL
 unpackDelayed ctx (DelayedAttr f) = f ctx
 unpackDelayed _ (RealizedAttr attr) = pure attr
 
--- TODO: I really wish we had lenses here
 -- | Update a CUContext field if the attributes are equal
 updateFld :: 
   (CUContext -> Maybe Word64) ->
