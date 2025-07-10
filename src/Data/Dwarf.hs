@@ -552,6 +552,27 @@ getDIEAndDescendants cuContext thisId = do
               dieReader = cuReader updatedCuContext
             }
 
+
+{-
+Note [DWARF Version Support]
+
+This library supports parsing DWARFv4 and DWARFv5. The support for DWARFv5 is incomplete.
+The compile unit (and line program unit) headers are used to extract the DWARF version and parsing is performed conditionally
+according to the specification for a given version. The breaking changes between v4 and v5 are decribed in the DWARF standard: https://dwarfstd.org/dwarf5std.html. 
+The changes between versions supported in this library include:
+
+* New header ordering in the compilation unit header parsed in 'getCUHeader'. 
+* Implementations for new forms of attribute values: addrx, data_16, strp, strx (in 'getForm'). These new forms access new sections
+such as 'dsStrOffsets'
+* The line progam header is changed substantially and parsed separately depending on version in 'getLNE'
+
+Further work is currently required to support:
+* loclistx (new loc list format)
+* rnglistx (new range list format)
+* Split object files
+
+-}
+
 getCUHeader ::
   (Endianess, Sections) ->
   -- | Map from previously seen .debug_abbrev offset to map.
