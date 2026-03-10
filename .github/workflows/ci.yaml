@@ -11,10 +11,12 @@ jobs:
         # Our current practice is to support at least the three most recent
         # versions of GHC. We keep old versions in CI as long as doing so causes
         # no undue burden.
+        #
+        # Be sure to update full-test.yaml when updating these.
         ghc: ["9.6.2", "9.8.2", "9.10.1", "9.12.2"]
         os: ["ubuntu-24.04"]
       fail-fast: false
-    uses: GaloisInc/.github/.github/workflows/haskell-ci.yml@v1
+    uses: GaloisInc/.github/.github/workflows/haskell-ci.yml@v2
     with:
       cabal: ${{ matrix.cabal }}
       check: false
@@ -25,5 +27,9 @@ jobs:
       os: ${{ matrix.os }}
       submodules: "true"
       pre-hook: |
+        # Install pinned compiler versions for test fixture compilation.
+        # Versions are pinned in tests/install-compilers.sh, which is also
+        # used by tests/Dockerfile to keep both environments in sync.
+        sudo bash tests/install-compilers.sh
         ln -s cabal.project.dist                 cabal.project
         ln -s cabal.ghc-${{ matrix.ghc }}.config cabal.project.freeze

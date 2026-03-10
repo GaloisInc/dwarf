@@ -150,7 +150,8 @@ getStringAttrWithSection offset secs section =
   do
       strsec <- section secs
       let str = B.drop (fromIntegral offset) strsec
-      pure $! DW_ATVAL_STRING (B.takeWhile (/= 0) str)
+      let result = B.takeWhile (/= 0) str
+      pure $! DW_ATVAL_STRING result
 
 getStringAttr :: (MonadFail m) => Word64 -> Sections -> m DW_ATVAL
 getStringAttr offset secs =
@@ -179,7 +180,7 @@ getEvaluableForm  secs end enc tgt form = do
     DW_FORM_strp -> do
       offset <- desrGetOffset end enc
       getStringAttr offset secs
-    DW_FORM_udata ->  DW_ATVAL_UINT <$> getULEB128
+    DW_FORM_udata ->  DW_ATVAL_UDATA <$> getULEB128
     -- new in Dwarf version 4
     DW_FORM_sec_offset ->  DW_ATVAL_UINT <$> desrGetOffset end enc
     DW_FORM_exprloc ->  DW_ATVAL_BLOB <$> getByteStringLen getULEB128

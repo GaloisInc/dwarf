@@ -20,6 +20,8 @@ module Data.Dwarf
     CUContext,
     cuReader,
     cuSections,
+    cuOffset,
+    cuSize,
     firstCUContext,
     cuFirstDie,
     nextCUContext,
@@ -525,7 +527,7 @@ updateFld getter setter expectedAt actAt val =
     ctx <- get
     Control.Monad.when (expectedAt == actAt) $ do
         uval <- unpackDelayed ctx val
-        let nval = setter ctx (((\case DW_ATVAL_UINT x -> Just x; _ -> Nothing) uval) <|> (getter ctx)) in
+        let nval = setter ctx (((\case DW_ATVAL_UINT x -> Just x; DW_ATVAL_UDATA x -> Just x; _ -> Nothing) uval) <|> (getter ctx)) in
           put nval
 
 -- | Compute attribute values from a list of form codes. State mantains the value of addrbase and
