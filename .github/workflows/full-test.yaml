@@ -1,0 +1,49 @@
+name: Full test
+# Tests all compiler/fixture combinations using llvm-dwarfdump as the reference.
+# Runs weekly and can be triggered manually to test a specific subset.
+on:
+  push:
+    branches: [test]
+  schedule:
+    - cron: '0 0 * * 0'  # Weekly, Sunday midnight UTC
+  workflow_dispatch:
+    inputs:
+      test_filter:
+        description: 'Tasty test pattern (-p), e.g. "gcc-13-x86_64" or "/global_var/"'
+        required: false
+        default: ''
+
+jobs:
+  full-test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: true
+
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.12.2'
+          cabal-version: '3.14.2.0'
+
+      - name: Install compilers and llvm-dwarfdump
+        run: |
+          sudo bash tests/install-compilers.sh
+          sudo apt-get install -y --no-install-recommends llvm
+
+      - name: Configure and build
+        run: |
+          ln -s cabal.project.dist cabal.project
+          ln -s cabal.ghc-9.12.2.config cabal.project.freeze
+          cabal build dwarf-dump
+
+      - name: Run full test suite
+        env:
+          DWARF_FULL_TEST: '1'
+          TEST_FILTER: ${{ inputs.test_filter || '' }}
+        run: |
+          if [ -n "$TEST_FILTER" ]; then
+            cabal test --test-options="-p \"$TEST_FILTER\""
+          else
+            cabal test
+          fi

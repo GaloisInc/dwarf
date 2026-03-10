@@ -1,1 +1,6 @@
 packages: .
+
+source-repository-package
+  type: git
+  location: https://github.com/GaloisInc/elf-edit
+  tag: f64ed273442edad6ee6910fdaf3541d6b0e312a3

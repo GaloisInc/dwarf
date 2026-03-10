@@ -125,15 +125,14 @@ getSLEB128 = go 0 0
 
 -- Decode an unsigned little-endian base 128 encoded integer.
 getULEB128 :: Get Word64
-getULEB128 =
-    let go acc shift = do
-        byte <- fromIntegral <$> getWord8 :: Get Word64
-        let temp = acc .|. (clearBit byte 7 `shiftL` shift)
-        if testBit byte 7 then
-            go temp (shift + 7)
-         else
-            pure temp
-    in go 0 0
+getULEB128 = go 0 0
+  where go acc shift = do
+          byte <- fromIntegral <$> getWord8 :: Get Word64
+          let temp = acc .|. (clearBit byte 7 `shiftL` shift)
+          if testBit byte 7 then
+              go temp (shift + 7)
+           else
+              pure temp
 
 strictGet :: Get a -> B.ByteString -> a
 strictGet action bs = runGet action $ L.fromChunks [bs]

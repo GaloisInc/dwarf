@@ -258,7 +258,7 @@ getWithDefault (FileLineHeaderEntry mp) k f d =
 -- | Converts a v5 file entry to a legacy file by extracting the relevant content types
 createLegacyFileName :: FileLineHeaderEntry -> LegacyFileName 
 createLegacyFileName hd = 
-    let defU64 lc d = getWithDefault hd lc (\case {DW_ATVAL_UINT s -> Just s; _ -> Nothing}) d
+    let defU64 lc d = getWithDefault hd lc (\case {DW_ATVAL_UINT s -> Just s; DW_ATVAL_UDATA s -> Just s; _ -> Nothing}) d
         pth = getWithDefault hd DW_LNCT_path (\case {DW_ATVAL_STRING s -> Just s; _ -> Nothing}) ""
         dirIndex = defU64 DW_LNCT_directory_index 0 
         size = defU64 DW_LNCT_size 0 

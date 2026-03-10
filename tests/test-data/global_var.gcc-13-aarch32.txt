@@ -1,0 +1,42 @@
+<binary>:	file format elf32-littlearm
+
+.debug_info contents:
+0x00000000: Compile Unit: length = 0x00000051, format = DWARF32, version = 0x0004, abbr_offset = 0x0000, addr_size = 0x04 (next unit at 0x00000055)
+
+0x0000000b: DW_TAG_compile_unit
+              DW_AT_producer	("GNU C17 13.3.0 -mfloat-abi=hard -mtls-dialect=gnu -mthumb -march=armv7-a+fp -g -gdwarf-4 -O0")
+              DW_AT_language	(DW_LANG_C99)
+              DW_AT_name	("tests/test-data/global_var.c")
+              DW_AT_comp_dir	("<path>")
+              DW_AT_low_pc	(<addr>)
+              DW_AT_high_pc	(<addr>)
+              DW_AT_stmt_list	(0x00000000)
+
+0x00000025:   DW_TAG_variable
+                DW_AT_name	("global_var")
+                DW_AT_decl_file	("<path>")
+                DW_AT_decl_line	(8)
+                DW_AT_decl_column	(5)
+                DW_AT_type	(0x00000037 "int")
+                DW_AT_external	(true)
+                DW_AT_location	(<addr>)
+
+0x00000037:   DW_TAG_base_type
+                DW_AT_byte_size	(0x04)
+                DW_AT_encoding	(DW_ATE_signed)
+                DW_AT_name	("int")
+
+0x0000003e:   DW_TAG_subprogram
+                DW_AT_external	(true)
+                DW_AT_name	("main")
+                DW_AT_decl_file	("<path>")
+                DW_AT_decl_line	(10)
+                DW_AT_decl_column	(5)
+                DW_AT_prototyped	(true)
+                DW_AT_type	(0x00000037 "int")
+                DW_AT_low_pc	(<addr>)
+                DW_AT_high_pc	(<addr>)
+                DW_AT_frame_base	(<addr>)
+                DW_AT_GNU_all_call_sites	(true)
+
+0x00000054:   NULL

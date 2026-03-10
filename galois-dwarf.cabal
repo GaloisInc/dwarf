@@ -18,13 +18,14 @@ source-repository head
 
 library
     build-depends:   base >= 2 && < 5, transformers >= 0.3,
-                     bytestring, containers, binary
+                     bytestring, containers, binary, template-haskell
     hs-source-dirs:  src
     exposed-modules:
       Data.Dwarf
       Data.Dwarf.Internals
     other-modules:
       Data.Dwarf.AT,
+      Data.Dwarf.AT.TH,
       Data.Dwarf.ATE,
       Data.Dwarf.CFA,
       Data.Dwarf.Form,
@@ -35,6 +36,26 @@ library
       Data.Dwarf.TAG,
       Data.Dwarf.Types
     ghc-options:     -Wall
+    default-language: Haskell2010
+
+executable dwarf-dump
+  default-language: Haskell2010
+  ghc-options: -Wall -Wcompat
+  main-is: DwarfDump.hs
+  hs-source-dirs: app
+  other-modules:
+    PrettyPrint,
+    ElfLoader
+  build-depends:
+    base,
+    binary,
+    bytestring,
+    containers,
+    elf-edit,
+    filepath >= 1.4,
+    galois-dwarf,
+    optparse-applicative >= 0.16,
+    text >= 1.2
 
 test-suite galois-dwarf-tests
   type: exitcode-stdio-1.0
@@ -46,5 +67,11 @@ test-suite galois-dwarf-tests
     base,
     binary,
     bytestring,
+    directory >= 1.3,
+    filepath >= 1.4,
     galois-dwarf,
-    mtl
+    mtl,
+    process >= 1.6,
+    tasty >= 1.4,
+    tasty-golden >= 2.3,
+    tasty-hunit >= 0.10
