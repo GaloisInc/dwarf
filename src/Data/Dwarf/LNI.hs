@@ -60,7 +60,8 @@ getDW_LNE end tgt = do
         fail $ "Unexpected DW_LNE code " ++ show w
 
 getDW_LNI :: Endianess -> TargetSize  -> Int64 -> Word8 -> Word8 -> Word64 -> Get DW_LNI
-getDW_LNI end tgt line_base line_range opcode_base minimum_instruction_length = fromIntegral <$> getWord8 >>= getDW_LNI_
+getDW_LNI end tgt line_base line_range opcode_base minimum_instruction_length =
+  fromIntegral <$> getWord8 >>= getDW_LNI_
     where getDW_LNI_ 0x00 = do
             rest <- getByteStringLen getULEB128
             case tryStrictGet (getDW_LNE end tgt) rest of
@@ -256,12 +257,19 @@ getWithDefault (FileLineHeaderEntry mp) k f d =
         f atVal)
 
 -- | Converts a v5 file entry to a legacy file by extracting the relevant content types
-createLegacyFileName :: FileLineHeaderEntry -> LegacyFileName 
-createLegacyFileName hd = 
-    let defU64 lc d = getWithDefault hd lc (\case {DW_ATVAL_UINT s -> Just s; DW_ATVAL_UDATA s -> Just s; _ -> Nothing}) d
-        pth = getWithDefault hd DW_LNCT_path (\case {DW_ATVAL_STRING s -> Just s; _ -> Nothing}) ""
-        dirIndex = defU64 DW_LNCT_directory_index 0 
-        size = defU64 DW_LNCT_size 0 
+createLegacyFileName :: FileLineHeaderEntry -> LegacyFileName
+createLegacyFileName hd =
+    let extractU64 = \case
+          DW_ATVAL_UINT s -> Just s
+          DW_ATVAL_UDATA s -> Just s
+          _ -> Nothing
+        extractString = \case
+          DW_ATVAL_STRING s -> Just s
+          _ -> Nothing
+        defU64 lc d = getWithDefault hd lc extractU64 d
+        pth = getWithDefault hd DW_LNCT_path extractString ""
+        dirIndex = defU64 DW_LNCT_directory_index 0
+        size = defU64 DW_LNCT_size 0
     in (pth, dirIndex, 0, size)
 
 -- | Given a list of 'LineFileEntryFormat' representing a pair of a content type code and format code, parses 

@@ -72,6 +72,19 @@ To regenerate golden files (e.g., when adding new tests or compilers):
 5. Regenerate golden files (see above)
 6. Commit golden files and updated files
 
+### Removing deprecated compilers
+
+When a compiler version is no longer needed (e.g., due to deprecation, lack of
+maintenance, or incompatibility with newer environments):
+
+1. Remove the compiler identifier from `ALL_COMPILERS` in `tests/Makefile`
+2. Remove the `RESOLVE_COMPILER` case from `tests/Makefile`
+3. Remove the `resolveCompiler` case and entry from `allCompilers` in `tests/Main.hs`
+4. Remove the apt package from `tests/install-compilers.sh`
+5. Delete associated golden files: `rm tests/test-data/*.<compiler-id>.txt`
+6. Delete associated binaries (if committed): `rm tests/test-data/*.<compiler-id>`
+7. Commit the changes
+
 ### Architecture
 
 - **Compiler discovery**: In normal mode, finds compilers from `*.*.txt` files in

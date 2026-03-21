@@ -36,6 +36,8 @@ elfEndianess elf = case Elf.elfData elf of
   Elf.ELFDATA2MSB -> BigEndian
 
 -- | Get file format string for a 64-bit ELF.
+-- This is a best-effort guess based on the ELF machine type and data encoding.
+-- Defaults to "elf64-unknown" when the format cannot be determined precisely.
 getFileFormat64 :: Elf.Elf 64 -> String
 getFileFormat64 elf =
   case Elf.elfMachine elf of
@@ -47,6 +49,8 @@ getFileFormat64 elf =
     _              -> "elf64-unknown"
 
 -- | Get file format string for a 32-bit ELF.
+-- This is a best-effort guess based on the ELF machine type and data encoding.
+-- Defaults to "elf32-unknown" when the format cannot be determined precisely.
 getFileFormat32 :: Elf.Elf 32 -> String
 getFileFormat32 elf =
   case Elf.elfMachine elf of
