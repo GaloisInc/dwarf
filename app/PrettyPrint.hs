@@ -25,6 +25,9 @@ parens :: TLB.Builder -> TLB.Builder
 parens b = "(" <> b <> ")"
 
 -- | Pretty-print the entire .debug_info section
+--
+-- Format exactly matches @llvm-dwarfdump@, as verified in the test suite.
+-- @llvm-dwarfdump@'s format is just determined experimentally.
 ppDebugInfo :: Dwarf.Endianess -> Dwarf.Sections -> TL.Text
 ppDebugInfo endian sections =
   let header = ".debug_info contents:\n"
