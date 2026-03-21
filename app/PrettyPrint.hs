@@ -200,72 +200,9 @@ formatBlob _dr b = case B.unpack b of
 
 -- | Format DW_TAG
 ppTag :: Dwarf.DW_TAG -> TLB.Builder
-ppTag (Dwarf.DW_TAG w) = case tagNameMap w of
+ppTag tag@(Dwarf.DW_TAG w) = case Dwarf.tagName tag of
   Just name -> TLB.fromString name
   Nothing   -> "DW_TAG_0x" <> TLBI.hexadecimal w
-
--- | Map DW_TAG codes to names
-tagNameMap :: Word64 -> Maybe String
-tagNameMap = \case
-  0x01 -> Just "DW_TAG_array_type"
-  0x02 -> Just "DW_TAG_class_type"
-  0x03 -> Just "DW_TAG_entry_point"
-  0x04 -> Just "DW_TAG_enumeration_type"
-  0x05 -> Just "DW_TAG_formal_parameter"
-  0x08 -> Just "DW_TAG_imported_declaration"
-  0x0a -> Just "DW_TAG_label"
-  0x0b -> Just "DW_TAG_lexical_block"
-  0x0d -> Just "DW_TAG_member"
-  0x0f -> Just "DW_TAG_pointer_type"
-  0x10 -> Just "DW_TAG_reference_type"
-  0x11 -> Just "DW_TAG_compile_unit"
-  0x12 -> Just "DW_TAG_string_type"
-  0x13 -> Just "DW_TAG_structure_type"
-  0x15 -> Just "DW_TAG_subroutine_type"
-  0x16 -> Just "DW_TAG_typedef"
-  0x17 -> Just "DW_TAG_union_type"
-  0x18 -> Just "DW_TAG_unspecified_parameters"
-  0x19 -> Just "DW_TAG_variant"
-  0x1a -> Just "DW_TAG_common_block"
-  0x1b -> Just "DW_TAG_common_inclusion"
-  0x1c -> Just "DW_TAG_inheritance"
-  0x1d -> Just "DW_TAG_inlined_subroutine"
-  0x1e -> Just "DW_TAG_module"
-  0x1f -> Just "DW_TAG_ptr_to_member_type"
-  0x20 -> Just "DW_TAG_set_type"
-  0x21 -> Just "DW_TAG_subrange_type"
-  0x22 -> Just "DW_TAG_with_stmt"
-  0x23 -> Just "DW_TAG_access_declaration"
-  0x24 -> Just "DW_TAG_base_type"
-  0x25 -> Just "DW_TAG_catch_block"
-  0x26 -> Just "DW_TAG_const_type"
-  0x27 -> Just "DW_TAG_constant"
-  0x28 -> Just "DW_TAG_enumerator"
-  0x29 -> Just "DW_TAG_file_type"
-  0x2a -> Just "DW_TAG_friend"
-  0x2b -> Just "DW_TAG_namelist"
-  0x2c -> Just "DW_TAG_namelist_item"
-  0x2d -> Just "DW_TAG_packed_type"
-  0x2e -> Just "DW_TAG_subprogram"
-  0x2f -> Just "DW_TAG_template_type_parameter"
-  0x30 -> Just "DW_TAG_template_value_parameter"
-  0x31 -> Just "DW_TAG_thrown_type"
-  0x32 -> Just "DW_TAG_try_block"
-  0x33 -> Just "DW_TAG_variant_part"
-  0x34 -> Just "DW_TAG_variable"
-  0x35 -> Just "DW_TAG_volatile_type"
-  0x36 -> Just "DW_TAG_dwarf_procedure"
-  0x37 -> Just "DW_TAG_restrict_type"
-  0x38 -> Just "DW_TAG_interface_type"
-  0x39 -> Just "DW_TAG_namespace"
-  0x3a -> Just "DW_TAG_imported_module"
-  0x3b -> Just "DW_TAG_unspecified_type"
-  0x3c -> Just "DW_TAG_partial_unit"
-  0x3d -> Just "DW_TAG_imported_unit"
-  0x3f -> Just "DW_TAG_condition"
-  0x40 -> Just "DW_TAG_shared_type"
-  0x4109 -> Just "DW_TAG_GNU_call_site"
-  _    -> Nothing
 
 -- | Zero-pad a hex number to at least @width@ digits, with @0x@ prefix.
 hexPad :: Int -> Word64 -> TLB.Builder
