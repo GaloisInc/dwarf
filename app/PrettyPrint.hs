@@ -20,6 +20,10 @@ import           Data.Dwarf (Reader(..), TargetSize(..))
 -- | Map from DieID to DW_AT_name, for resolving type references.
 type NameMap = Map.Map Dwarf.DieID String
 
+-- | Wrap a builder in parentheses.
+parens :: TLB.Builder -> TLB.Builder
+parens b = "(" <> b <> ")"
+
 -- | Pretty-print the entire .debug_info section
 ppDebugInfo :: Dwarf.Endianess -> Dwarf.Sections -> TL.Text
 ppDebugInfo endian sections =
@@ -121,43 +125,44 @@ ppDW_AT at@(Dwarf.DW_AT w) = case Dwarf.atName at of
 ppDW_ATVAL :: Reader -> NameMap -> Dwarf.DW_AT -> Dwarf.DW_ATVAL -> TLB.Builder
 ppDW_ATVAL dr nameMap at = \case
   Dwarf.DW_ATVAL_UINT w   -> formatUint at w
-  Dwarf.DW_ATVAL_UDATA w  -> "(" <> TLBI.decimal w <> ")"
-  Dwarf.DW_ATVAL_INT i    -> "(" <> TLBI.decimal i <> ")"
-  Dwarf.DW_ATVAL_STRING n -> TLB.fromString ("(" ++ show (BC.unpack n) ++ ")")
+  Dwarf.DW_ATVAL_UDATA w  -> parens (TLBI.decimal w)
+  Dwarf.DW_ATVAL_INT i    -> parens (TLBI.decimal i)
+  Dwarf.DW_ATVAL_STRING n -> parens (TLB.fromString (show (BC.unpack n)))
   Dwarf.DW_ATVAL_REF did  -> formatRef at did nameMap
   Dwarf.DW_ATVAL_BLOB b   -> formatBlob dr b
-  Dwarf.DW_ATVAL_BOOL b   -> if b then "(true)" else "(false)"
+  Dwarf.DW_ATVAL_BOOL b   -> parens (if b then "true" else "false")
 
 -- | Format a reference value.  DW_AT_type includes the referenced type name;
 -- all other reference attributes show only the offset.
 formatRef :: Dwarf.DW_AT -> Dwarf.DieID -> NameMap -> TLB.Builder
 formatRef at did nameMap =
   let Dwarf.DieID offset = did
-      base = "(" <> hexPad 8 offset
-  in case at of
-       Dwarf.DW_AT_type ->
-         case Map.lookup did nameMap of
-           Just n  -> base <> TLB.fromString (" \"" ++ n ++ "\")")
-           Nothing -> base <> ")"
-       _ -> base <> ")"
+      base = hexPad 8 offset
+      inner = case at of
+                Dwarf.DW_AT_type ->
+                  case Map.lookup did nameMap of
+                    Just n  -> base <> TLB.fromString (" \"" ++ n ++ "\"")
+                    Nothing -> base
+                _ -> base
+  in parens inner
 
 -- | Context-aware uint formatting
 formatUint :: Dwarf.DW_AT -> Word64 -> TLB.Builder
-formatUint at w = case at of
-  Dwarf.DW_AT_low_pc -> "(" <> hexPad 16 w <> ")"
-  Dwarf.DW_AT_high_pc -> "(" <> hexPad 16 w <> ")"
-  Dwarf.DW_AT_entry_pc -> "(" <> hexPad 16 w <> ")"
-  Dwarf.DW_AT_byte_size -> "(" <> hexPad 2 w <> ")"
-  Dwarf.DW_AT_byte_stride -> "(" <> hexPad 2 w <> ")"
-  Dwarf.DW_AT_language -> "(" <> languageName w <> ")"
-  Dwarf.DW_AT_encoding -> "(" <> ateName w <> ")"
-  Dwarf.DW_AT_stmt_list -> "(" <> hexPad 8 w <> ")"
-  Dwarf.DW_AT_decl_file -> "(" <> TLBI.decimal w <> ")"
-  Dwarf.DW_AT_decl_line -> "(" <> TLBI.decimal w <> ")"
-  Dwarf.DW_AT_decl_column -> "(" <> TLBI.decimal w <> ")"
-  Dwarf.DW_AT_const_value -> "(" <> hexPad 2 w <> ")"
-  Dwarf.DW_AT_data_member_location -> "(" <> hexPad 2 w <> ")"
-  _ -> "(" <> hexPad 1 w <> ")"
+formatUint at w = parens $ case at of
+  Dwarf.DW_AT_low_pc -> hexPad 16 w
+  Dwarf.DW_AT_high_pc -> hexPad 16 w
+  Dwarf.DW_AT_entry_pc -> hexPad 16 w
+  Dwarf.DW_AT_byte_size -> hexPad 2 w
+  Dwarf.DW_AT_byte_stride -> hexPad 2 w
+  Dwarf.DW_AT_language -> languageName w
+  Dwarf.DW_AT_encoding -> ateName w
+  Dwarf.DW_AT_stmt_list -> hexPad 8 w
+  Dwarf.DW_AT_decl_file -> TLBI.decimal w
+  Dwarf.DW_AT_decl_line -> TLBI.decimal w
+  Dwarf.DW_AT_decl_column -> TLBI.decimal w
+  Dwarf.DW_AT_const_value -> hexPad 2 w
+  Dwarf.DW_AT_data_member_location -> hexPad 2 w
+  _ -> hexPad 1 w
 
 -- | Map DW_LANG codes to names
 languageName :: Word64 -> TLB.Builder
