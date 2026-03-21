@@ -11,16 +11,12 @@ import           PrettyPrint (ppDebugInfo)
 data Options = Options
   { optFile :: FilePath
   , optDebugInfo :: Bool
-  , optDebugLine :: Bool
-  , optDebugFrame :: Bool
   }
 
 optionsParser :: Opt.Parser Options
 optionsParser = Options
   <$> Opt.argument Opt.str (Opt.metavar "FILE")
   <*> Opt.switch (Opt.long "debug-info" <> Opt.help "Dump .debug_info section")
-  <*> Opt.switch (Opt.long "debug-line" <> Opt.help "Dump .debug_line section")
-  <*> Opt.switch (Opt.long "debug-frame" <> Opt.help "Dump .debug_frame section")
 
 main :: IO ()
 main = do
@@ -37,7 +33,3 @@ main = do
         putStrLn $ optFile opts ++ ":\tfile format " ++ fileFormat
         putStrLn ""
         TLIO.putStr $ ppDebugInfo endian sections
-      when (optDebugLine opts) $
-        putStrLn "Debug line support not yet implemented"
-      when (optDebugFrame opts) $
-        putStrLn "Debug frame support not yet implemented"

@@ -527,8 +527,12 @@ updateFld getter setter expectedAt actAt val =
     ctx <- get
     Control.Monad.when (expectedAt == actAt) $ do
         uval <- unpackDelayed ctx val
-        let nval = setter ctx (((\case DW_ATVAL_UINT x -> Just x; DW_ATVAL_UDATA x -> Just x; _ -> Nothing) uval) <|> (getter ctx)) in
-          put nval
+        let extractUInt = \case
+              DW_ATVAL_UINT x -> Just x
+              DW_ATVAL_UDATA x -> Just x
+              _ -> Nothing
+            nval = setter ctx (extractUInt uval <|> getter ctx)
+         in put nval
 
 -- | Compute attribute values from a list of form codes. State mantains the value of addrbase and
 -- string offset base within the 'CUContext'

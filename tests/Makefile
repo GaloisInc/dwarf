@@ -19,6 +19,13 @@ CFLAGS    := -nostdlib -nostartfiles -g -O0
 
 # Shell case statement mapping compiler identifiers to their binaries/flags.
 # Expanded inline in compile and golden targets.
+#
+# Compiler selection methodology:
+# - Native x86_64 compilers use their bare binary names (gcc-13, clang-*)
+# - GCC cross-compilers use Debian/Ubuntu's standard <arch>-linux-<abi>-gcc naming
+# - Clang cross-compiles via --target=<triple> using the system clang
+# - Target triples follow the LLVM target naming convention
+# - All cross-compilation requires appropriate sysroots (provided by gcc-*-cross packages)
 RESOLVE_COMPILER = \
 	case $$compiler in \
 	  gcc-13-x86_64)    cmd="gcc-13" ;; \

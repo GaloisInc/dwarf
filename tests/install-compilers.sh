@@ -6,6 +6,11 @@ set -euo pipefail
 apt-get update -q
 
 # x86_64 native compilers.
+# Version selection: these are the latest stable versions available in the
+# ubuntu-24.04 repository at the time of writing. Versions are pinned to ensure
+# reproducible test results across different environments. GCC 13 is the default
+# system compiler. Multiple Clang versions (16, 17, 18) provide coverage across
+# recent LLVM releases to test DWARF compatibility.
 apt-get install -y --no-install-recommends \
     gcc-13=13.3.0-6ubuntu2~24.04.1 \
     clang-16=1:16.0.6-23ubuntu4 \
