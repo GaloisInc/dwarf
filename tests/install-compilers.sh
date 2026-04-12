@@ -21,7 +21,7 @@ apt-get install -y --no-install-recommends \
 # non-x86_64 targets via --target=<triple>; the GCC packages provide the
 # sysroots that clang also uses.
 apt-get install -y --no-install-recommends \
-    gcc-13-aarch64-linux-gnu=13.3.0-6ubuntu2~24.04cross1 \
-    gcc-13-arm-linux-gnueabihf=13.3.0-6ubuntu2~24.04cross1 \
-    gcc-13-powerpc-linux-gnu=13.3.0-6ubuntu2~24.04cross1 \
-    gcc-13-powerpc64le-linux-gnu=13.3.0-6ubuntu2~24.04cross1
+    gcc-13-aarch64-linux-gnu=13.3.0-6ubuntu2~24.04.1cross1 \
+    gcc-13-arm-linux-gnueabihf=13.3.0-6ubuntu2~24.04.1cross1 \
+    gcc-13-powerpc-linux-gnu=13.3.0-6ubuntu2~24.04.1cross1 \
+    gcc-13-powerpc64le-linux-gnu=13.3.0-6ubuntu2~24.04.1cross1
