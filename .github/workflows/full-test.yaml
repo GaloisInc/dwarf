@@ -23,7 +23,7 @@ jobs:
 
       - uses: haskell-actions/setup@v2
         with:
-          ghc-version: '9.12.2'
+          ghc-version: '9.14.1'
           cabal-version: '3.14.2.0'
 
       - name: Install compilers and llvm-dwarfdump
@@ -34,7 +34,7 @@ jobs:
       - name: Configure and build
         run: |
           ln -s cabal.project.dist cabal.project
-          ln -s cabal.ghc-9.12.2.config cabal.project.freeze
+          ln -s cabal.ghc-9.14.1.config cabal.project.freeze
           cabal build dwarf-dump
 
       - name: Run full test suite
