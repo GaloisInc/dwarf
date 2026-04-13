@@ -13,7 +13,7 @@ jobs:
         # no undue burden.
         #
         # Be sure to update full-test.yaml when updating these.
-        ghc: ["9.6.2", "9.8.2", "9.10.1", "9.12.2"]
+        ghc: ["9.6.2", "9.8.2", "9.10.1", "9.12.2", "9.14.1"]
         os: ["ubuntu-24.04"]
       fail-fast: false
     uses: GaloisInc/.github/.github/workflows/haskell-ci.yml@v2
